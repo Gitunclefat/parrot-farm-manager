@@ -56,7 +56,7 @@ create table if not exists public.breedings (
   female_id bigint references public.birds(id),
   temp_label text,
   pair_date date,
-  stage text not null default '配对' check (stage in ('配对','产蛋','孵化中','出壳','育雏中','断奶成活','失败')),
+  stage text not null default '挂窝' check (stage in ('挂窝','产蛋','孵化中','出壳','育雏中','断奶成活','失败')),
   terminated_reason text,
   deleted boolean not null default false,
   created_at timestamptz not null default now()
