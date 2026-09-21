@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>鹦鹉养殖场管理</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128038;</text></svg>">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<!-- 登录视图 -->
+<div id="view-login" class="login-wrap">
+  <div class="login-card">
+    <div class="logo">
+      <span class="logo-mark">&#128038;</span>
+      <h1>鹦鹉养殖场管理</h1>
+      <p class="sub">手机 / 平板随时记录</p>
+    </div>
+    <form id="login-form">
+      <label>邮箱
+        <input type="email" id="login-email" autocomplete="username" required placeholder="you@example.com">
+      </label>
+      <label>密码
+        <input type="password" id="login-password" autocomplete="current-password" required>
+      </label>
+      <div id="login-error" class="error"></div>
+      <button type="submit" class="btn-primary">登 录</button>
+    </form>
+    <p class="login-tip">仅授权员工可登录</p>
+  </div>
+</div>
+
+<!-- 主应用视图 -->
+<div id="view-app" class="app" hidden>
+  <header class="topbar">
+    <span id="topbar-title">首页</span>
+    <button id="btn-logout" class="btn-ghost" title="退出登录">退出</button>
+  </header>
+
+  <main id="page-container" class="page"></main>
+
+  <nav class="bottomnav">
+    <button class="nav-item" data-page="home"><span class="nav-ico">&#127968;</span>首页</button>
+    <button class="nav-item" data-page="birds"><span class="nav-ico">&#128038;</span>种鸟</button>
+    <button class="nav-item" data-page="breed"><span class="nav-ico">&#129370;</span>繁殖</button>
+    <button class="nav-item" data-page="chicks"><span class="nav-ico">&#128038;</span>雏鸟</button>
+    <button class="nav-item" data-page="more"><span class="nav-ico">&#9776;</span>更多</button>
+  </nav>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
