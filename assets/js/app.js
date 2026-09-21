@@ -1173,9 +1173,11 @@ async function renderReports() {
   document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));
   pageContainer.innerHTML = `<div class="empty">加载中…</div>`;
   const m = today().slice(0,7); // YYYY-MM
+  const [yy, mm] = m.split("-").map(Number);
+  const nextMonth = `${yy}-${String(mm === 12 ? 1 : mm + 1).padStart(2, "0")}-01`;
   const [ordersRes, purRes, birdsRes, chicksRes] = await Promise.all([
-    sb.from("orders").select("total,payment_status,order_date").or("deleted.is.null,deleted.is.false").gte("order_date", m+"-01").lt("order_date", m+"-32"),
-    sb.from("purchases").select("amount,purchase_date").or("deleted.is.null,deleted.is.false").gte("purchase_date", m+"-01").lt("purchase_date", m+"-32"),
+    sb.from("orders").select("total,payment_status,order_date").or("deleted.is.null,deleted.is.false").gte("order_date", m+"-01").lt("order_date", nextMonth),
+    sb.from("purchases").select("amount,purchase_date").or("deleted.is.null,deleted.is.false").gte("purchase_date", m+"-01").lt("purchase_date", nextMonth),
     sb.from("birds").select("id", {count:"exact"}).eq("deleted",false),
     sb.from("chicks").select("status", {count:"exact"}).eq("deleted",false),
   ]);
