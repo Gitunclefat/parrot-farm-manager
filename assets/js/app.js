@@ -832,7 +832,7 @@ function renderOrders() {
 function bindOrders() {
   const el = (id) => pageContainer.querySelector(id);
   if (!el("#o-add")) return;
-  el("#o-add").addEventListener("click", openOrderForm);
+  el("#o-add").addEventListener("click", () => openOrderForm());
   el("#o-status").addEventListener("change", loadOrders);
   loadOrders();
 }
