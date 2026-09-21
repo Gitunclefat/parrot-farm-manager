@@ -434,9 +434,11 @@ async function autoMakeChicks(br, detail) {
   if (br.male_id) { const { data } = await sb.from("birds").select("*").eq("id", br.male_id).single(); father = data; species = species || data.species; variety = variety || data.variety; }
   if (br.female_id) { const { data } = await sb.from("birds").select("*").eq("id", br.female_id).single(); mother = data; species = species || data.species; variety = variety || data.variety; }
   const rows = [];
+  const baseCode = await autoCode("CH", "chicks");
+  const baseN = parseInt(String(baseCode).split("-")[1], 10) || 0;
   for (let i = 0; i < n; i++) {
     rows.push({
-      code: await autoCode("CH", "chicks"),
+      code: "CH-" + String(baseN + i).padStart(4, "0"),
       breeding_id: br.id,
       father_id: father ? father.id : null,
       mother_id: mother ? mother.id : null,
@@ -445,7 +447,8 @@ async function autoMakeChicks(br, detail) {
       status: "在养",
     });
   }
-  await sb.from("chicks").insert(rows);
+  const ins = await sb.from("chicks").insert(rows);
+  if (ins.error) console.error("autoMakeChicks:", ins.error.message);
 }
 
 // ---------- 雏鸟管理 ----------
