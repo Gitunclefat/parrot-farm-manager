@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>存栏联动与雏鸟销售扣库存规则</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4D3A'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23F7F4EE'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23D99A3D'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink:#23352C;
+    --muted:#5A6B61;
+    --bg:#F7F4EE;
+    --card:#FFFFFF;
+    --line:#DCD5C7;
+    --green:#1F4D3A;
+    --green-2:#2E6B4F;
+    --amber:#C98A2D;
+    --amber-bg:#F6EAD6;
+    --red:#B4473F;
+    --red-bg:#F6E2DF;
+    --blue:#3A5D7A;
+    --blue-bg:#E3ECF3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC","Helvetica Neue",Arial,sans-serif;
+    line-height:1.6;
+    padding:28px 20px 40px;
+    font-size:15px;
+  }
+  .wrap{max-width:1080px;margin:0 auto;}
+  header.kicker{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  h1{font-size:26px;font-weight:800;color:var(--green);letter-spacing:.5px;}
+  .sub{color:var(--muted);font-size:13.5px;}
+  .rule-note{margin-top:8px;font-size:13px;color:var(--muted);}
+  .rule-note b{color:var(--green-2);}
+
+  section{margin-top:34px;}
+  .sec-title{
+    display:flex;align-items:center;gap:10px;
+    font-size:18px;font-weight:700;color:var(--green);
+  }
+  .sec-title::before{
+    content:"";display:inline-block;width:8px;height:22px;border-radius:3px;background:var(--amber);
+  }
+  .sec-desc{margin-top:6px;font-size:14px;color:var(--muted);}
+
+  /* ===== 阶段流转主图 ===== */
+  .flow{
+    margin-top:18px;
+    display:flex;flex-wrap:wrap;align-items:stretch;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:26px 18px 22px;
+  }
+  .stage{
+    flex:1 1 150px;min-width:130px;
+    background:var(--green);
+    color:#fff;
+    border-radius:10px;
+    padding:12px 8px;
+    text-align:center;
+    font-size:16px;font-weight:700;
+    box-shadow:0 2px 6px rgba(31,77,58,.18);
+  }
+  .stage .st-sub{display:block;font-size:12px;font-weight:400;opacity:.85;margin-top:2px;}
+  .stage.out{background:var(--green-2);}
+  .stage.sold{background:#8A6B2F;}
+  .link{
+    flex:0 0 auto;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    min-width:118px;padding:4px 6px;
+  }
+  .link .evt{
+    font-size:12px;color:var(--muted);text-align:center;
+    background:var(--amber-bg);border:1px solid #E4CFA6;
+    border-radius:8px;padding:3px 7px;margin-bottom:4px;
+  }
+  .link .evt b{color:#8A5A13;font-weight:700;}
+  .link .arrow{font-size:22px;color:var(--amber);line-height:1;font-weight:700;}
+  .flow-foot{
+    flex-basis:100%;
+    margin-top:16px;padding-top:12px;
+    border-top:1px dashed var(--line);
+    display:flex;flex-wrap:wrap;gap:10px 26px;
+    font-size:13px;color:var(--muted);
+  }
+  .flow-foot span b{color:var(--ink);}
+  .flow-foot .bad-red{color:var(--red);}
+  .flow-foot .bad-red b{color:var(--red);}
+  .flow-foot .bad-blue{color:var(--blue);}
+  .flow-foot .bad-blue b{color:var(--blue);}
+
+  /* ===== 事件表 ===== */
+  table{
+    margin-top:14px;width:100%;
+    border-collapse:collapse;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:12px;overflow:hidden;
+    table-layout:fixed;
+  }
+  colgroup col:nth-child(1){width:7%;}
+  colgroup col:nth-child(2){width:24%;}
+  colgroup col:nth-child(3){width:14%;}
+  colgroup col:nth-child(4){width:28%;}
+  colgroup col:nth-child(5){width:27%;}
+  th,td{
+    padding:10px 12px;
+    text-align:left;
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+    font-size:14px;
+    word-break:break-word;
+  }
+  th{
+    background:var(--green);
+    color:#fff;
+    font-weight:600;
+    font-size:13.5px;
+  }
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:nth-child(even){background:#FBFAF6;}
+  td .tag{
+    display:inline-block;font-size:12px;font-weight:600;
+    padding:1px 8px;border-radius:999px;margin-right:4px;
+  }
+  .tag.m3{background:var(--blue-bg);color:var(--blue);}
+  .tag.m12{background:var(--amber-bg);color:#8A5A13;}
+  .tag.m5{background:#E8EFE9;color:var(--green-2);}
+  .tag.m4{background:#EFE7DD;color:#7A5B2E;}
+  .tag.m7{background:#E4E9EE;color:#46586B;}
+  .minus{color:var(--red);font-weight:700;}
+  .plus{color:var(--green-2);font-weight:700;}
+  .conv{color:#8A5A13;font-weight:700;}
+
+  /* ===== 双栏细则 ===== */
+  .cols{
+    margin-top:14px;
+    display:flex;flex-wrap:wrap;gap:16px;
+  }
+  .col{
+    flex:1 1 400px;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px 18px;
+  }
+  .col h3{
+    font-size:15.5px;color:var(--green);
+    display:flex;align-items:center;gap:8px;
+    margin-bottom:10px;
+  }
+  .col h3 .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);display:inline-block;}
+  .col ul{list-style:none;}
+  .col li{
+    position:relative;padding-left:16px;
+    font-size:14px;color:var(--ink);
+    margin-bottom:8px;
+  }
+  .col li::before{
+    content:"";position:absolute;left:2px;top:9px;
+    width:6px;height:6px;border-radius:2px;background:var(--green-2);
+  }
+  .col li b{color:var(--green-2);}
+  .col li .warn{color:var(--red);}
+
+  footer{
+    margin-top:36px;padding-top:14px;
+    border-top:1px solid var(--line);
+    font-size:12.5px;color:var(--muted);
+  }
+
+  /* ===== 窄屏 ===== */
+  @media (max-width:720px){
+    body{padding:20px 14px 32px;}
+    h1{font-size:21px;}
+    .flow{flex-direction:column;align-items:stretch;padding:20px 14px;}
+    .stage{width:100%;}
+    .link{
+      min-width:0;flex-direction:column;
+      padding:6px 0;
+    }
+    .link .arrow{transform:rotate(90deg);}
+    .flow-foot{flex-direction:column;gap:8px;}
+    th,td{font-size:13px;padding:8px;}
+    colgroup col:nth-child(1){width:9%;}
+    colgroup col:nth-child(2){width:26%;}
+    colgroup col:nth-child(3){width:16%;}
+    colgroup col:nth-child(4){width:24%;}
+    colgroup col:nth-child(5){width:25%;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="kicker">
+    <h1>存栏联动与雏鸟销售扣库存规则</h1>
+    <span class="sub">鹦鹉养殖场管理系统 · 需求依据 PRD v0.4（M12.3 / M4 / M5）</span>
+  </header>
+  <p class="rule-note">存栏按「品种 × 阶段」统计；<b>育雏 → 幼鸟 → 待售</b>为阶段转换（总数不变），<b>销售</b>才真正扣减存栏数量并标记雏鸟为已售。</p>
+
+  <!-- ===== 视图：阶段流转 ===== -->
+  <section>
+    <div class="sec-title">雏鸟生命周期与存栏阶段流转</div>
+    <div class="flow">
+      <div class="stage">出壳<span class="st-sub">繁殖记录阶段</span></div>
+      <div class="link">
+        <span class="evt">繁殖填出壳数<br><b>育雏 +N</b></span>
+        <span class="arrow">→</span>
+      </div>
+      <div class="stage">育雏<span class="st-sub">存栏阶段</span></div>
+      <div class="link">
+        <span class="evt">断奶 / 成活确认<br><b>育雏→幼鸟（转换）</b></span>
+        <span class="arrow">→</span>
+      </div>
+      <div class="stage out">幼鸟<span class="st-sub">存栏阶段</span></div>
+      <div class="link">
+        <span class="evt">达月龄转待售<br><b>幼鸟→待售（转换）</b></span>
+        <span class="arrow">→</span>
+      </div>
+      <div class="stage out">待售<span class="st-sub">可售库存</span></div>
+      <div class="link">
+        <span class="evt">销售开单<br><b>待售 −N</b></span>
+        <span class="arrow">→</span>
+      </div>
+      <div class="stage sold">已售<span class="st-sub">移出存栏统计</span></div>
+
+      <div class="flow-foot">
+        <span class="bad-red"><b>死亡：</b>任意阶段 −D，对应雏鸟状态置「死亡」</span>
+        <span class="bad-blue"><b>取消订单：</b>待售 +N 回补，雏鸟状态回「待售」</span>
+        <span class="bad-blue"><b>外购入库：</b>对应阶段 +N</span>
+        <span><b>盘点调整：</b>仅场主手动修正，需填原因并留流水</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 视图：事件表 ===== -->
+  <section>
+    <div class="sec-title">事件 → 库存影响明细</div>
+    <table>
+      <colgroup>
+        <col><col><col><col><col>
+      </colgroup>
+      <thead>
+        <tr>
+          <th>序号</th><th>事件</th><th>触发模块</th><th>存栏影响</th><th>雏鸟记录影响</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>繁殖记录填出壳数</td><td><span class="tag m3">M3 繁殖</span></td><td><span class="plus">育雏 +出壳数</span></td><td>—</td></tr>
+        <tr><td>2</td><td>育雏期死亡</td><td><span class="tag m3">M3</span> <span class="tag m12">M12 雏鸟</span></td><td><span class="minus">育雏 −死亡数</span></td><td>对应雏鸟状态置「死亡」</td></tr>
+        <tr><td>3</td><td>断奶 / 成活确认（填成活数）</td><td><span class="tag m3">M3 繁殖</span></td><td class="conv">育雏 −成活数，幼鸟 +成活数（阶段转换，总量不变）</td><td>自动生成 N 条雏鸟记录（N = 成活数）</td></tr>
+        <tr><td>4</td><td>雏鸟转待售（达月龄或手动）</td><td><span class="tag m12">M12 雏鸟</span></td><td class="conv">幼鸟 −N，待售 +N（阶段转换）</td><td>雏鸟状态「在养」→「待售」</td></tr>
+        <tr><td>5</td><td>销售开单</td><td><span class="tag m5">M5 销售</span></td><td><span class="minus">待售 −数量</span></td><td>对应雏鸟状态「待售」→「已售」</td></tr>
+        <tr><td>6</td><td>取消订单</td><td><span class="tag m5">M5 销售</span></td><td><span class="plus">待售 +数量（回补）</span></td><td>雏鸟状态回「待售」</td></tr>
+        <tr><td>7</td><td>外购入库</td><td><span class="tag m7">M7 采购</span> <span class="tag m4">M4 存栏</span></td><td><span class="plus">对应阶段 +数量</span></td><td>手动建档</td></tr>
+        <tr><td>8</td><td>盘点调整</td><td><span class="tag m4">M4 存栏</span></td><td>手动修正（仅场主，需原因）</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== 视图：细则 ===== -->
+  <section>
+    <div class="sec-title">销售扣减与验卡导入回写细则</div>
+    <div class="cols">
+      <div class="col">
+        <h3><span class="dot"></span>雏鸟销售扣减（M12.3）</h3>
+        <ul>
+          <li>开单方式一：按 <b>品种 / 品相 + 数量</b>，系统校验「待售」库存 ≥ 数量才可提交，按 <b>先转待售先卖（FIFO）</b>自动匹配雏鸟并标记已售</li>
+          <li>开单方式二：<b>直接勾选具体雏鸟</b>（推荐），开单即锁定并标记「已售」</li>
+          <li><span class="warn">库存不足时禁止提交，提示差额</span></li>
+          <li>雏鸟状态与库存<b>严格同步</b>，所有变动走系统事件生成流水，不可手动改数</li>
+          <li>每次变动生成库存流水（时间、品种、阶段、变动量、原因、关联单号 / 窝次、操作人）</li>
+          <li><span class="warn">已售雏鸟不可重复销售</span>（状态校验拦截）</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3><span class="dot"></span>验卡导入回写（M12.2 已确认）</h3>
+        <ul>
+          <li><b>性别</b>：始终更新为验卡结果</li>
+          <li><b>品相</b>：仅当雏鸟品相<b>为空</b>时回填导入值，否则不更新</li>
+          <li><b>出生日期</b>：仅当雏鸟出生日期<b>为空或无效</b>时，设置为「验卡日期 − 2 个月」，有效值不覆盖</li>
+          <li>脚环号匹配不到的行列为「未匹配」并提示，可人工处理</li>
+          <li>验卡记录只增不改，结果以检测报告为准</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    口径依据：PRD v0.4（2026-09-21）· 第 4 章 M12.3 / M4 / M5 · 第 8 节第 14-17 条。死亡原因、转待售月龄阈值等可在系统设置中配置。
+  </footer>
+
+</div>
+</body>
+</html>
