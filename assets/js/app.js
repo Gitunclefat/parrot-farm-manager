@@ -306,11 +306,11 @@ async function openNest(id) {
   document.querySelectorAll(".nav-item").forEach((x) => x.classList.remove("active"));
   let html = `<h2 class="sec">巢箱 ${esc(nest.code)} · ${esc(nest.position || "")}</h2>`;
   if (!br) {
-    html += `<div class="card"><p style="margin-bottom:10px">当前没有进行中的繁殖。繁殖期不便打扰时，可直接开始记录，父母脚环号后期再补。</p>
-      <button class="btn-primary" id="start-b">开始繁殖记录</button></div>
+    html += `<div class="card"><p style="margin-bottom:10px">当前没有进行中的繁殖。先选定这一巢箱的一公一母，再开始挂窝。</p>
+      <button class="btn-primary" id="start-b">开始挂窝</button></div>
       <div class="bar" style="margin-top:14px"><button class="btn-ghost" id="back-b" style="color:var(--muted);border-color:var(--line)">返回巢箱列表</button></div>`;
   } else {
-    const stages = ["配对", "产蛋", "孵化中", "出壳", "育雏中", "断奶成活"];
+    const stages = ["挂窝", "产蛋", "孵化中", "出壳", "育雏中", "断奶成活"];
     const si = stages.indexOf(br.stage);
     html += `<div class="card">
       <div class="row-title">窝次 ${esc(br.code)} <span class="tag">${esc(br.stage)}</span></div>
@@ -328,47 +328,82 @@ async function openNest(id) {
 }
 
 async function openBreedingStart(nestId) {
-  // 选择公母种鸟（按脚环号搜，可留空）
-  titleEl.textContent = "开始繁殖记录";
+  // 选择公母种鸟：按脚环号搜；找不到可现场建临时鸟（脚环号空）
+  titleEl.textContent = "开始挂窝";
+  let picked = { m: null, f: null };
   pageContainer.innerHTML = `
-    <h2 class="sec">开始繁殖（可只填巢箱号，父母后补）</h2>
+    <h2 class="sec">挂窝（一公一母）</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:8px">公母鸟需从已有种鸟中选择；脚环号未知时可先建临时档案，后期补录。</p>
     <form class="form" id="bs">
-      <label>配对日期<input type="date" id="bs-date" value="${today()}"></label>
-      <label>公鸟脚环号（留空=后期补录）<input id="bs-m" placeholder="输入脚环号搜索"></label>
-      <div id="bs-m-msg"></div>
-      <label>母鸟脚环号（留空=后期补录）<input id="bs-f" placeholder="输入脚环号搜索"></label>
-      <div id="bs-f-msg"></div>
+      <label>挂窝日期<input type="date" id="bs-date" value="${today()}"></label>
+
+      <label>公鸟（脚环号/档案号）<input id="bs-m" placeholder="输入后点查找"></label>
+      <div id="bs-m-msg" style="font-size:12px;margin-bottom:6px"></div>
+
+      <label>母鸟（脚环号/档案号）<input id="bs-f" placeholder="输入后点查找"></label>
+      <div id="bs-f-msg" style="font-size:12px;margin-bottom:6px"></div>
+
       <div class="err" id="bs-err"></div>
-      <div class="bar"><button type="button" class="btn-ghost" id="bs-c">取消</button><button type="submit" class="btn-primary">开始</button></div>
+      <div class="bar"><button type="button" class="btn-ghost" id="bs-c">取消</button><button type="submit" class="btn-primary">开始挂窝</button></div>
     </form>`;
-  const pick = async (inputId, msgId) => {
+
+  const pick = async (inputId, msgId, gender) => {
     const v = pageContainer.querySelector(inputId).value.trim();
-    if (!v) { pageContainer.querySelector(msgId).innerHTML = ""; return null; }
+    const msg = pageContainer.querySelector(msgId);
+    if (!v) { msg.innerHTML = ""; picked[gender === "公" ? "m" : "f"] = null; return null; }
     const { data } = await sb.from("birds").select("*").eq("deleted", false)
-      .or(`band.eq.${v},code.eq.${v}`).limit(1).single();
-    if (data) {
-      pageContainer.querySelector(msgId).innerHTML = `<span class="tag">已匹配 ${esc(data.band)} ${esc(data.species)}/${esc(data.variety || "")}</span>`;
-      return data;
+      .or(`band.eq.${v},code.eq.${v}`).limit(1);
+    if (data && data.length) {
+      const b = data[0];
+      if (b.gender && b.gender !== gender) {
+        msg.innerHTML = `<span style="color:var(--red)">这只登记为${b.gender}，与${gender}不符</span>`;
+        return null;
+      }
+      msg.innerHTML = `<span class="tag">已选：${esc(b.band || b.code)} ${esc(b.species)}/${esc(b.variety || "?")}</span>
+        <button type="button" class="btn-ghost" style="color:var(--green);border-color:var(--green);padding:3px 10px;margin-left:6px" data-newtemp="${gender}">没有？建临时鸟</button>`;
+      picked[gender === "公" ? "m" : "f"] = b;
+      return b;
     }
-    pageContainer.querySelector(msgId).innerHTML = `<span style="color:var(--red);font-size:12px">未找到该脚环号，将作为临时记录</span>`;
+    msg.innerHTML = `<span style="color:var(--muted)">未找到，可建为临时${gender}鸟（无脚环号）</span>
+      <button type="button" class="btn-ghost" style="color:var(--green);border-color:var(--green);padding:3px 10px;margin-left:6px" data-newtemp="${gender}">＋ 新建临时${gender}鸟</button>`;
     return null;
   };
-  pageContainer.querySelector("#bs-m").addEventListener("change", () => pick("#bs-m", "#bs-m-msg"));
-  pageContainer.querySelector("#bs-f").addEventListener("change", () => pick("#bs-f", "#bs-f-msg"));
+
+  pageContainer.querySelector("#bs-m").addEventListener("change", () => pick("#bs-m", "#bs-m-msg", "公"));
+  pageContainer.querySelector("#bs-f").addEventListener("change", () => pick("#bs-f", "#bs-f-msg", "母"));
+  pageContainer.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-newtemp]");
+    if (!btn) return;
+    const gender = btn.dataset.newtemp;
+    const code = await autoCode("NB", "birds");
+    const ins = await sb.from("birds").insert({
+      code, species: "玄凤", variety: null, gender,
+      source: "自繁", status: "待补录", band: null,
+    }).select().single();
+    if (ins.error) { alert(ins.error.message); return; }
+    const b = ins.data;
+    picked[gender === "公" ? "m" : "f"] = b;
+    const msgId = gender === "公" ? "#bs-m-msg" : "#bs-f-msg";
+    pageContainer.querySelector(msgId).innerHTML =
+      `<span class="tag">已建临时鸟：${esc(b.code)}（${gender}），脚环号后补</span>`;
+  });
+
   pageContainer.querySelector("#bs-c").addEventListener("click", () => openNest(nestId));
   pageContainer.querySelector("#bs").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const m = await pick("#bs-m", "#bs-m-msg");
-    const f = await pick("#bs-f", "#bs-f-msg");
+    const err = pageContainer.querySelector("#bs-err");
+    err.textContent = "";
+    if (!picked.m || !picked.f) { err.textContent = "请先选定公鸟和母鸟（可建临时鸟）"; return; }
+    if (picked.m.id === picked.f.id) { err.textContent = "公母不能是同一只鸟"; return; }
     const code = await autoCode("BR", "breedings");
     const ins = await sb.from("breedings").insert({
       code, nest_id: nestId,
-      male_id: m ? m.id : null, female_id: f ? f.id : null,
-      temp_label: null, pair_date: pageContainer.querySelector("#bs-date").value, stage: "配对",
+      male_id: picked.m.id, female_id: picked.f.id,
+      pair_date: pageContainer.querySelector("#bs-date").value, stage: "挂窝",
     });
-    if (ins.error) { pageContainer.querySelector("#bs-err").textContent = ins.error.message; return; }
+    if (ins.error) { err.textContent = ins.error.message; return; }
     await sb.from("nests").update({ status: "占用" }).eq("id", nestId);
-    toast("繁殖已开始"); openNest(nestId);
+    toast("已开始挂窝"); openNest(nestId);
   });
 }
 
@@ -378,7 +413,7 @@ const STAGE_FIELDS = {
   "出壳": [["hatch_date", "出壳日期", "date"], ["hatch_count", "出壳只数", "number"]],
   "断奶成活": [["wean_date", "断奶日期", "date"], ["survived_count", "成活只数", "number"], ["died_count", "中途死亡只数", "number"]],
 };
-const NEXT_STAGE = { "配对": "产蛋", "产蛋": "孵化中", "孵化中": "出壳", "出壳": "育雏中", "育雏中": "断奶成活" };
+const NEXT_STAGE = { "挂窝": "产蛋", "产蛋": "孵化中", "孵化中": "出壳", "出壳": "育雏中", "育雏中": "断奶成活" };
 
 async function bindStageAdvance(br) {
   const zone = pageContainer.querySelector("#next-stage-zone");
