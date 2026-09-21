@@ -1029,12 +1029,19 @@ async function deductChicks(items) {
 
 
 // ---------- 采购支出 ----------
+let _pMonth = null; // YYYY-MM，默认当月
 function renderPurchases() {
   setTimeout(bindPurchases, 0);
+  const m = _pMonth || today().slice(0,7);
   return `
-    <div class="bar">
-      <select id="p-cat"><option value="">全部类别</option>${["种鸟","饲料","药品","耗材","其他"].map(c=>`<option>${c}</option>`).join("")}</select>
+    <div class="bar" style="flex-wrap:wrap;gap:6px">
+      <button class="btn-ghost sm" id="p-prev">‹ 上月</button>
+      <input type="month" id="p-month" value="${m}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <button class="btn-ghost sm" id="p-next">下月 ›</button>
       <button class="btn-primary sm" id="p-add" style="margin-left:auto">记一笔</button>
+    </div>
+    <div class="bar" style="margin-top:6px">
+      <select id="p-cat" style="flex:1"><option value="">全部类别</option>${["种鸟","饲料","药品","耗材","其他"].map(c=>`<option>${c}</option>`).join("")}</select>
     </div>
     <div id="p-list"></div>`;
 }
@@ -1043,23 +1050,40 @@ function bindPurchases() {
   if (!el("#p-add")) return;
   el("#p-add").addEventListener("click", () => openPurchaseForm());
   el("#p-cat").addEventListener("change", loadPurchases);
+  el("#p-month").addEventListener("change", (e) => { _pMonth = e.target.value; loadPurchases(); });
+  const shift = (d) => {
+    const cur = _pMonth || today().slice(0,7);
+    let [y, m] = cur.split("-").map(Number);
+    m += d; if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; }
+    _pMonth = `${y}-${String(m).padStart(2,"0")}`;
+    document.getElementById("p-month").value = _pMonth;
+    loadPurchases();
+  };
+  el("#p-prev").addEventListener("click", () => shift(-1));
+  el("#p-next").addEventListener("click", () => shift(1));
   loadPurchases();
 }
 async function loadPurchases() {
   const cat = pageContainer.querySelector("#p-cat").value;
-  let q = sb.from("purchases").select("*").eq("deleted", false).order("id",{ascending:false}).limit(200);
+  const m = pageContainer.querySelector("#p-month").value; // YYYY-MM
+  const [yy, mm] = m.split("-").map(Number);
+  const start = `${m}-01`;
+  const end = `${yy}-${String(mm===12?1:mm+1).padStart(2,"0")}-01`;
+  let q = sb.from("purchases").select("*").or("deleted.is.null,deleted.is.false")
+    .gte("purchase_date", start).lt("purchase_date", end)
+    .order("purchase_date",{ascending:false}).order("id",{ascending:false}).limit(500);
   if (cat) q = q.eq("category", cat);
   const { data, error } = await q;
   const box = pageContainer.querySelector("#p-list");
   if (!box) return;
   if (error) { box.innerHTML = `<div class="empty">${esc(error.message)}</div>`; return; }
   const total = (data||[]).reduce((s,p)=>s+Number(p.amount||0),0);
-  const head = `<div style="padding:10px 4px;font-size:13px;color:var(--muted)">本列表合计：<b style="color:var(--ink)">¥${total.toFixed(2)}</b></div>`;
-  if (!data || !data.length) { box.innerHTML = head + '<div class="empty">暂无支出记录</div>'; return; }
+  const head = `<div style="padding:10px 4px;font-size:13px;color:var(--muted)">${m} 合计：<b style="color:var(--ink)">¥${total.toFixed(2)}</b></div>`;
+  if (!data || !data.length) { box.innerHTML = head + '<div class="empty">本月暂无支出记录</div>'; return; }
   box.innerHTML = head + data.map(p=>`
     <div class="row" data-id="${p.id}">
       <div>
-        <div class="row-title">${esc(p.category)} <span style="color:var(--red);float:right">¥${Number(p.amount||0).toFixed(2)}</span></div>
+        <div class="row-title">${esc(p.category||"其他")} <span style="color:var(--red);float:right">¥${Number(p.amount||0).toFixed(2)}</span></div>
         <div class="row-sub">${esc(p.purchase_date||"")} · ${esc(p.supplier||"")}${p.note?" · "+esc(p.note):""}</div>
       </div>
       <div class="row-arrow">›</div>
