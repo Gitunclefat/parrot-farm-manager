@@ -1,5 +1,5 @@
-# 数据表结构（按 PRD v0.5 第 5 节）
-# 在 Supabase SQL Editor 中整段执行。单场内部系统：已登录用户（authenticated）可读写。
+-- 数据表结构（按 PRD v0.5 第 5 节）
+-- 在 Supabase SQL Editor 中整段执行。单场内部系统：已登录用户（authenticated）可读写。
 
 -- ---------- 用户档案 ----------
 create table if not exists public.profiles (
