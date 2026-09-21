@@ -63,6 +63,9 @@ const PAGES = {
   more: { title: "更多", render: renderMore },
   orders: { title: "销售订单", render: renderOrders },
   customers: { title: "客户管理", render: renderCustomers },
+  purchases: { title: "采购支出", render: renderPurchases },
+  reminders: { title: "待办提醒", render: renderReminders },
+  reports: { title: "统计报表", render: renderReports },
 };
 
 function showPage(name) {
@@ -728,9 +731,9 @@ function renderMore() {
     <div class="card quick">
       <button class="btn-line" data-go="orders">销售订单 / 开单</button>
       <button class="btn-line" data-go="customers">客户管理</button>
-      <button class="btn-line" disabled style="opacity:.4">采购支出（阶段 4）</button>
-      <button class="btn-line" disabled style="opacity:.4">待办提醒（阶段 4）</button>
-      <button class="btn-line" disabled style="opacity:.4">统计报表（阶段 5）</button>
+      <button class="btn-line" data-go="purchases">采购支出</button>
+      <button class="btn-line" data-go="reminders">待办提醒</button>
+      <button class="btn-line" data-go="reports">统计报表</button>
     </div>`;
 }
 function bindMore() {
@@ -890,6 +893,7 @@ async function openOrderForm(id) {
       <label>备注<input id="of-note" value="${esc(o.note || "")}"></label>
       <div class="err" id="of-err"></div>
       <div class="bar"><button type="button" class="btn-ghost" id="of-cancel">返回</button><button type="submit" class="btn-primary">保存订单</button></div>
+      ${id ? `<button type="button" id="of-void" style="width:100%;margin-top:8px;color:var(--red);border-color:var(--red);background:transparent;padding:10px;border-radius:8px">取消订单并回补库存</button>` : ""}
     </form>`;
 
   // 加载客户列表
@@ -946,6 +950,10 @@ async function openOrderForm(id) {
   }
 
   pageContainer.querySelector("#of-cancel").addEventListener("click", () => showPage("orders"));
+  pageContainer.querySelector("#of-void")?.addEventListener("click", async () => {
+    if (!confirm("确认取消此订单？相关雏鸟将退回待售。")) return;
+    await cancelOrder(id);
+  });
   pageContainer.querySelector("#of").addEventListener("submit", async (e) => {
     e.preventDefault();
     const err = pageContainer.querySelector("#of-err");
@@ -972,21 +980,29 @@ async function openOrderForm(id) {
     if (id) {
       const r = await sb.from("orders").update(orderPayload).eq("id", id);
       if (r.error) { err.textContent = r.error.message; return; }
+      // 重插明细
+      await sb.from("order_items").delete().eq("order_id", id);
+      await sb.from("order_items").insert(items.map((it) => ({ order_id: id, ...it })));
+      // 收款差额补记
+      const { data: oldPays } = await sb.from("payments").select("amount").eq("order_id", id);
+      const oldPaid = (oldPays||[]).reduce((x,p)=>x+Number(p.amount||0),0);
+      if (paid > oldPaid) {
+        await sb.from("payments").insert({
+          order_id: id, amount: paid - oldPaid,
+          method: pageContainer.querySelector("#of-method").value,
+        });
+      }
     } else {
       const r = await sb.from("orders").insert(orderPayload).select().single();
       if (r.error) { err.textContent = r.error.message; return; }
       orderId = r.data.id;
-      // 删除旧明细再重插
-      await sb.from("order_items").delete().eq("order_id", orderId);
       await sb.from("order_items").insert(items.map((it) => ({ order_id: orderId, ...it })));
-      // 收款记录（本次填入的 paid）
       if (paid > 0) {
         await sb.from("payments").insert({
           order_id: orderId, amount: paid,
           method: pageContainer.querySelector("#of-method").value,
         });
       }
-      // 扣减待售雏鸟（FIFO）
       await deductChicks(items);
     }
     toast("已保存"); showPage("orders");
@@ -1009,6 +1025,200 @@ async function deductChicks(items) {
       }
     }
   }
+}
+
+
+// ---------- 采购支出 ----------
+function renderPurchases() {
+  setTimeout(bindPurchases, 0);
+  return `
+    <div class="bar">
+      <select id="p-cat"><option value="">全部类别</option>${["种鸟","饲料","药品","耗材","其他"].map(c=>`<option>${c}</option>`).join("")}</select>
+      <button class="btn-primary sm" id="p-add" style="margin-left:auto">记一笔</button>
+    </div>
+    <div id="p-list"></div>`;
+}
+function bindPurchases() {
+  const el = (id) => pageContainer.querySelector(id);
+  if (!el("#p-add")) return;
+  el("#p-add").addEventListener("click", () => openPurchaseForm());
+  el("#p-cat").addEventListener("change", loadPurchases);
+  loadPurchases();
+}
+async function loadPurchases() {
+  const cat = pageContainer.querySelector("#p-cat").value;
+  let q = sb.from("purchases").select("*").eq("deleted", false).order("id",{ascending:false}).limit(200);
+  if (cat) q = q.eq("category", cat);
+  const { data, error } = await q;
+  const box = pageContainer.querySelector("#p-list");
+  if (!box) return;
+  if (error) { box.innerHTML = `<div class="empty">${esc(error.message)}</div>`; return; }
+  const total = (data||[]).reduce((s,p)=>s+Number(p.amount||0),0);
+  const head = `<div style="padding:10px 4px;font-size:13px;color:var(--muted)">本列表合计：<b style="color:var(--ink)">¥${total.toFixed(2)}</b></div>`;
+  if (!data || !data.length) { box.innerHTML = head + '<div class="empty">暂无支出记录</div>'; return; }
+  box.innerHTML = head + data.map(p=>`
+    <div class="row" data-id="${p.id}">
+      <div>
+        <div class="row-title">${esc(p.category)} <span style="color:var(--red);float:right">¥${Number(p.amount||0).toFixed(2)}</span></div>
+        <div class="row-sub">${esc(p.purchase_date||"")} · ${esc(p.supplier||"")}${p.note?" · "+esc(p.note):""}</div>
+      </div>
+      <div class="row-arrow">›</div>
+    </div>`).join("");
+  box.querySelectorAll(".row").forEach(r => r.addEventListener("click", () => openPurchaseForm(Number(r.dataset.id))));
+}
+function openPurchaseForm(id) {
+  titleEl.textContent = id ? "编辑支出" : "记一笔支出";
+  document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));
+  const load = id
+    ? sb.from("purchases").select("*").eq("id", id).single().then(r=>r.data)
+    : Promise.resolve({ purchase_date: today(), category: "饲料", amount: 0 });
+  load.then(p => {
+    pageContainer.innerHTML = `
+      <form class="form" id="pf">
+        <label>日期<input type="date" id="pf-date" value="${p.purchase_date||today()}"></label>
+        <label>类别<select id="pf-cat">${["种鸟","饲料","药品","耗材","其他"].map(c=>`<option ${c===p.category?"selected":""}>${c}</option>`).join("")}</select></label>
+        <label>金额（元）<input type="number" step="0.01" id="pf-amount" value="${p.amount||0}"></label>
+        <label>供应商 / 来源<input id="pf-supplier" value="${esc(p.supplier||"")}"></label>
+        <label>备注<input id="pf-note" value="${esc(p.note||"")}"></label>
+        <div class="err" id="pf-err"></div>
+        <div class="bar"><button type="button" class="btn-ghost" id="pf-c">取消</button><button type="submit" class="btn-primary">保存</button></div>
+      </form>`;
+    pageContainer.querySelector("#pf-c").addEventListener("click", ()=>showPage("purchases"));
+    pageContainer.querySelector("#pf").addEventListener("submit", async (e)=>{
+      e.preventDefault();
+      const payload = {
+        purchase_date: document.getElementById("pf-date").value || today(),
+        category: document.getElementById("pf-cat").value,
+        amount: Number(document.getElementById("pf-amount").value)||0,
+        supplier: document.getElementById("pf-supplier").value.trim()||null,
+        note: document.getElementById("pf-note").value.trim()||null,
+      };
+      const r = id ? await sb.from("purchases").update(payload).eq("id", id)
+                   : await sb.from("purchases").insert(payload);
+      if (r.error) { document.getElementById("pf-err").textContent = r.error.message; return; }
+      toast("已保存"); showPage("purchases");
+    });
+  });
+}
+
+// ---------- 待办提醒 ----------
+function renderReminders() {
+  setTimeout(bindReminders, 0);
+  return `
+    <div class="bar">
+      <select id="r-filter"><option value="pending">待办</option><option value="done">已完成</option></select>
+      <button class="btn-primary sm" id="r-add" style="margin-left:auto">＋ 提醒</button>
+    </div>
+    <div id="r-list"></div>`;
+}
+function bindReminders() {
+  const el = (id) => pageContainer.querySelector(id);
+  if (!el("#r-add")) return;
+  el("#r-add").addEventListener("click", openReminderForm);
+  el("#r-filter").addEventListener("change", loadReminders);
+  loadReminders();
+}
+async function loadReminders() {
+  const f = pageContainer.querySelector("#r-filter").value;
+  let q = sb.from("reminders").select("*").eq("deleted",false).order("id",{ascending:false}).limit(100);
+  if (f==="pending") q = q.eq("done", false);
+  if (f==="done") q = q.eq("done", true);
+  const { data, error } = await q;
+  const box = pageContainer.querySelector("#r-list");
+  if (!box) return;
+  if (error) { box.innerHTML = `<div class="empty">${esc(error.message)}</div>`; return; }
+  if (!data || !data.length) { box.innerHTML = '<div class="empty">暂无</div>'; return; }
+  box.innerHTML = data.map(r=>`
+    <div class="row" style="${r.done?"opacity:.5":""}">
+      <div>
+        <div class="row-title">${r.done?"✅ ":""}${esc(r.title)}</div>
+        <div class="row-sub">${esc(r.remind_date||"")} · ${esc(r.type||"其他")}</div>
+      </div>
+      ${r.done?"":`<button class="btn-ghost sm" data-done="${r.id}" style="color:var(--green);border-color:var(--green)">完成</button>`}
+    </div>`).join("");
+  box.querySelectorAll("[data-done]").forEach(b=>b.addEventListener("click", async ()=>{
+    await sb.from("reminders").update({ done: true }).eq("id", Number(b.dataset.done));
+    toast("已完成"); loadReminders();
+  }));
+}
+function openReminderForm() {
+  titleEl.textContent = "新增提醒";
+  document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));
+  pageContainer.innerHTML = `
+    <form class="form" id="rf">
+      <label>事项<input id="rf-title" placeholder="如：A-01 巢箱照蛋"></label>
+      <label>提醒日期<input type="date" id="rf-date" value="${today()}"></label>
+      <label>类型<select id="rf-type">${["照蛋","换羽","驱虫","疫苗","其他"].map(t=>`<option>${t}</option>`).join("")}</select></label>
+      <div class="err" id="rf-err"></div>
+      <div class="bar"><button type="button" class="btn-ghost" id="rf-c">取消</button><button type="submit" class="btn-primary">保存</button></div>
+    </form>`;
+  document.getElementById("rf-c").addEventListener("click", ()=>showPage("reminders"));
+  document.getElementById("rf").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const payload = {
+      title: document.getElementById("rf-title").value.trim(),
+      remind_date: document.getElementById("rf-date").value || today(),
+      type: document.getElementById("rf-type").value,
+      done: false,
+    };
+    if (!payload.title) { document.getElementById("rf-err").textContent="请填事项"; return; }
+    await sb.from("reminders").insert(payload);
+    toast("已添加"); showPage("reminders");
+  });
+}
+
+// ---------- 统计报表 ----------
+async function renderReports() {
+  titleEl.textContent = "统计报表";
+  document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));
+  pageContainer.innerHTML = `<div class="empty">加载中…</div>`;
+  const m = today().slice(0,7); // YYYY-MM
+  const [ordersRes, purRes, birdsRes, chicksRes] = await Promise.all([
+    sb.from("orders").select("total,payment_status,order_date").eq("deleted",false).gte("order_date", m+"-01").lt("order_date", m+"-32"),
+    sb.from("purchases").select("amount,purchase_date").eq("deleted",false).gte("purchase_date", m+"-01").lt("purchase_date", m+"-32"),
+    sb.from("birds").select("id", {count:"exact"}).eq("deleted",false),
+    sb.from("chicks").select("status", {count:"exact"}).eq("deleted",false),
+  ]);
+  const sales = (ordersRes.data||[]).reduce((s,o)=>s+Number(o.total||0),0);
+  const cost = (purRes.data||[]).reduce((s,p)=>s+Number(p.amount||0),0);
+  const { data: chickStatus } = await sb.from("chicks").select("status").eq("deleted",false);
+  const cnt = {};
+  (chickStatus||[]).forEach(c => cnt[c.status]=(cnt[c.status]||0)+1);
+  pageContainer.innerHTML = `
+    <h3 class="sec">本月（${m}）</h3>
+    <div class="grid2">
+      <div class="stat"><div class="num">¥${sales.toFixed(0)}</div><div class="lbl">销售额</div></div>
+      <div class="stat"><div class="num">¥${cost.toFixed(0)}</div><div class="lbl">支出</div></div>
+    </div>
+    <div class="card" style="margin-top:10px;text-align:center;padding:14px">
+      <div style="font-size:13px;color:var(--muted)">本月毛利（销售-支出）</div>
+      <div style="font-size:24px;font-weight:700;color:${(sales-cost)>=0?'var(--green)':'var(--red)'}">¥${(sales-cost).toFixed(0)}</div>
+    </div>
+    <h3 class="sec" style="margin-top:16px">存栏</h3>
+    <div class="grid2">
+      <div class="stat"><div class="num">${birdsRes.count||0}</div><div class="lbl">在养种鸟</div></div>
+      <div class="stat"><div class="num">${cnt["在养"]||0}</div><div class="lbl">在养雏鸟</div></div>
+      <div class="stat"><div class="num">${cnt["待售"]||0}</div><div class="lbl">待售雏鸟</div></div>
+      <div class="stat"><div class="num">${cnt["已售"]||0}</div><div class="lbl">已售雏鸟</div></div>
+    </div>`;
+  return "";
+}
+
+// 取消订单并回补雏鸟库存
+async function cancelOrder(id) {
+  const { data: items } = await sb.from("order_items").select("*").eq("order_id", id);
+  await sb.from("orders").update({ payment_status: "已取消" }).eq("id", id);
+  for (const it of (items||[])) {
+    // 把同品种最近被标记已售的雏鸟退回待售
+    const { data } = await sb.from("chicks").select("*")
+      .eq("species", it.species).eq("status","已售").eq("deleted",false)
+      .order("id",{ascending:false}).limit(it.qty);
+    for (const c of (data||[])) {
+      await sb.from("chicks").update({ status:"待售" }).eq("id", c.id);
+    }
+  }
+  toast("已取消，库存已回补");
+  showPage("orders");
 }
 
 // ---------- 登录 / 退出 ----------
