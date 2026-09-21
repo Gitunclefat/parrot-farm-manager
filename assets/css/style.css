@@ -50,3 +50,19 @@ input{font:inherit}
 .empty{color:var(--muted);text-align:center;padding:40px 0;font-size:14px}
 h2.sec{font-size:15px;margin:18px 0 10px;color:var(--ink)}
 @media(min-width:768px){.grid{grid-template-columns:repeat(4,1fr)}}
+
+/* ---------- 阶段 1：列表 / 表单 ---------- */
+.bar{display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap}
+.bar input,.bar select{padding:10px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff}
+.btn-primary.sm{width:auto;margin:0;padding:10px 14px;font-size:14px}
+.row{background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.row-title{font-size:16px;font-weight:600}
+.row-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.tag{font-size:11px;background:#eef3ee;color:var(--green-d);padding:2px 8px;border-radius:10px;margin-left:6px;font-weight:400}
+.row-arrow{color:var(--muted);font-size:22px}
+.form label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+.form input,.form select,.form textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-size:16px;background:#fff;margin-top:3px}
+.form input:disabled{background:#f3f1ea;color:var(--muted)}
+.err{color:var(--red);font-size:13px;min-height:18px;margin:10px 0 4px}
+.quick .btn-line{display:block;width:100%;text-align:left;padding:13px 4px;border-bottom:1px solid var(--line);font-size:15px;color:var(--green-d);background:none}
+.quick .btn-line:last-child{border-bottom:none}
