@@ -1030,15 +1030,23 @@ async function deductChicks(items) {
 
 // ---------- 采购支出 ----------
 let _pMonth = null; // YYYY-MM，默认当月
+let _pRange = { start: "", end: "" }; window._pRangeState = _pRange;
 function renderPurchases() {
   setTimeout(bindPurchases, 0);
   const m = _pMonth || today().slice(0,7);
   return `
     <div class="bar" style="flex-wrap:wrap;gap:6px">
-      <button class="btn-ghost sm" id="p-prev">‹ 上月</button>
+      <button class="btn-nav" id="p-prev">‹ 上月</button>
       <input type="month" id="p-month" value="${m}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">
-      <button class="btn-ghost sm" id="p-next">下月 ›</button>
+      <button class="btn-nav" id="p-next">下月 ›</button>
       <button class="btn-primary sm" id="p-add" style="margin-left:auto">记一笔</button>
+    </div>
+    <div class="bar" style="margin-top:6px;gap:6px">
+      <input type="date" id="p-start" value="${_pRange.start}" placeholder="开始" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <span style="color:var(--muted)">至</span>
+      <input type="date" id="p-end" value="${_pRange.end}" placeholder="结束" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <button class="btn-nav" id="p-apply">应用区间</button>
+      <button class="btn-nav" id="p-clear">清除</button>
     </div>
     <div class="bar" style="margin-top:6px">
       <select id="p-cat" style="flex:1"><option value="">全部类别</option>${["种鸟","饲料","药品","耗材","其他"].map(c=>`<option>${c}</option>`).join("")}</select>
@@ -1061,14 +1069,38 @@ function bindPurchases() {
   };
   el("#p-prev").addEventListener("click", () => shift(-1));
   el("#p-next").addEventListener("click", () => shift(1));
+  el("#p-apply").addEventListener("click", () => {
+    _pRange.start = el("#p-start").value;
+    _pRange.end = el("#p-end").value;
+    loadPurchases();
+  });
+  el("#p-clear").addEventListener("click", () => {
+    _pRange.start = ""; _pRange.end = "";
+    document.getElementById("p-start").value = "";
+    document.getElementById("p-end").value = "";
+    loadPurchases();
+  });
   loadPurchases();
 }
 async function loadPurchases() {
   const cat = pageContainer.querySelector("#p-cat").value;
-  const m = pageContainer.querySelector("#p-month").value; // YYYY-MM
-  const [yy, mm] = m.split("-").map(Number);
-  const start = `${m}-01`;
-  const end = `${yy}-${String(mm===12?1:mm+1).padStart(2,"0")}-01`;
+  let start, end, label;
+  if (_pRange.start || _pRange.end) {
+    start = _pRange.start || "2000-01-01";
+    end = _pRange.end || "2100-12-31";
+    if (_pRange.end) {
+      const [ey,em,ed] = end.split("-").map(Number);
+      const dt = new Date(ey, em-1, ed+1);
+      end = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+    }
+    label = `${_pRange.start||"最早"} ~ ${_pRange.end||"现在"}`;
+  } else {
+    const m = pageContainer.querySelector("#p-month").value;
+    const [yy, mm] = m.split("-").map(Number);
+    start = `${m}-01`;
+    end = `${yy}-${String(mm===12?1:mm+1).padStart(2,"0")}-01`;
+    label = m;
+  }
   let q = sb.from("purchases").select("*").or("deleted.is.null,deleted.is.false")
     .gte("purchase_date", start).lt("purchase_date", end)
     .order("purchase_date",{ascending:false}).order("id",{ascending:false}).limit(500);
@@ -1078,7 +1110,7 @@ async function loadPurchases() {
   if (!box) return;
   if (error) { box.innerHTML = `<div class="empty">${esc(error.message)}</div>`; return; }
   const total = (data||[]).reduce((s,p)=>s+Number(p.amount||0),0);
-  const head = `<div style="padding:10px 4px;font-size:13px;color:var(--muted)">${m} 合计：<b style="color:var(--ink)">¥${total.toFixed(2)}</b></div>`;
+  const head = `<div style="padding:10px 4px;font-size:13px;color:var(--muted)">${label} 合计：<b style="color:var(--ink)">¥${total.toFixed(2)}</b></div>`;
   if (!data || !data.length) { box.innerHTML = head + '<div class="empty">本月暂无支出记录</div>'; return; }
   box.innerHTML = head + data.map(p=>`
     <div class="row" data-id="${p.id}">
