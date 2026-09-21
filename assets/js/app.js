@@ -1174,8 +1174,8 @@ async function renderReports() {
   pageContainer.innerHTML = `<div class="empty">加载中…</div>`;
   const m = today().slice(0,7); // YYYY-MM
   const [ordersRes, purRes, birdsRes, chicksRes] = await Promise.all([
-    sb.from("orders").select("total,payment_status,order_date").eq("deleted",false).gte("order_date", m+"-01").lt("order_date", m+"-32"),
-    sb.from("purchases").select("amount,purchase_date").eq("deleted",false).gte("purchase_date", m+"-01").lt("purchase_date", m+"-32"),
+    sb.from("orders").select("total,payment_status,order_date").or("deleted.is.null,deleted.is.false").gte("order_date", m+"-01").lt("order_date", m+"-32"),
+    sb.from("purchases").select("amount,purchase_date").or("deleted.is.null,deleted.is.false").gte("purchase_date", m+"-01").lt("purchase_date", m+"-32"),
     sb.from("birds").select("id", {count:"exact"}).eq("deleted",false),
     sb.from("chicks").select("status", {count:"exact"}).eq("deleted",false),
   ]);
