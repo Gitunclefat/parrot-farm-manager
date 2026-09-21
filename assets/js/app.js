@@ -421,6 +421,97 @@ async function bindStageAdvance(br) {
     zone.innerHTML = `<p style="color:var(--muted);font-size:13px">本窝已结束，雏鸟已自动生成。</p>`; return;
   }
   if (br.stage === "失败") { zone.innerHTML = ""; return; }
+
+  // 产蛋阶段：可多次记录蛋数，确认照蛋后再推进
+  if (br.stage === "产蛋") {
+    const eggs = (br.breeding_details || []).filter(d => d.egg_count);
+    const totalEgg = eggs.length ? Math.max(...eggs.map(d => d.egg_count)) : 0;
+    zone.innerHTML = `
+      <div style="font-size:13px;color:var(--muted);margin:6px 0">当前累计蛋数：<b style="color:var(--ink)">${totalEgg}</b> 颗</div>
+      <h3 style="font-size:14px;margin:8px 0">更新蛋数</h3>
+      <form id="sv">
+        <label style="font-size:13px;color:var(--muted);display:block;margin:6px 0 2px">日期
+          <input type="date" id="sv-laid_date" value="${today()}" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:2px"></label>
+        <label style="font-size:13px;color:var(--muted);display:block;margin:6px 0 2px">累计总蛋数
+          <input type="number" id="sv-egg_count" value="${totalEgg}" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:2px"></label>
+        <div class="err" id="sv-err"></div>
+        <button type="submit" class="btn-primary" style="margin-top:8px">更新蛋数</button>
+      </form>
+      <button type="button" id="sv-next" class="btn-ghost" style="color:var(--green);border-color:var(--green);margin-top:10px">蛋已下完，照蛋转入孵化中 ›</button>
+      <button type="button" id="sv-fail" class="btn-ghost" style="color:var(--red);border-color:var(--red);margin-left:8px">本窝失败</button>`;
+    zone.querySelector("#sv").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const detail = {
+        breeding_id: br.id,
+        laid_date: pageContainer.querySelector("#sv-laid_date").value || null,
+        egg_count: parseInt(pageContainer.querySelector("#sv-egg_count").value, 10) || 0,
+      };
+      const r1 = await sb.from("breeding_details").insert(detail);
+      if (r1.error) { pageContainer.querySelector("#sv-err").textContent = r1.error.message; return; }
+      toast("已更新蛋数"); openNest(br.nest_id);
+    });
+    zone.querySelector("#sv-next").addEventListener("click", () => {
+      zone.innerHTML = `
+        <h3 style="font-size:14px;margin:8px 0">照蛋 → 孵化中</h3>
+        <form id="sv">
+          <label style="font-size:13px;color:var(--muted);display:block;margin:6px 0 2px">照蛋日期
+            <input type="date" id="sv-candle_date" value="${today()}" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:2px"></label>
+          <label style="font-size:13px;color:var(--muted);display:block;margin:6px 0 2px">受精蛋数
+            <input type="number" id="sv-fertile_count" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:2px"></label>
+          <div class="err" id="sv-err"></div>
+          <button type="submit" class="btn-primary" style="margin-top:8px">记录并推进</button>
+        </form>`;
+      zone.querySelector("#sv").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const detail = {
+          breeding_id: br.id,
+          candle_date: pageContainer.querySelector("#sv-candle_date").value || null,
+          fertile_count: parseInt(pageContainer.querySelector("#sv-fertile_count").value, 10) || 0,
+        };
+        await sb.from("breeding_details").insert(detail);
+        await sb.from("breedings").update({ stage: "孵化中" }).eq("id", br.id);
+        toast("已推进到孵化中"); openNest(br.nest_id);
+      });
+    });
+    bindFail(zone, br);
+    return;
+  }
+
+  // 出壳阶段：可多天记录出壳数，确认完成后进入育雏
+  if (br.stage === "出壳") {
+    const hatches = (br.breeding_details || []).filter(d => d.hatch_count);
+    const totalHatch = hatches.reduce((s, d) => s + (d.hatch_count || 0), 0);
+    zone.innerHTML = `
+      <div style="font-size:13px;color:var(--muted);margin:6px 0">累计出壳：<b style="color:var(--ink)">${totalHatch}</b> 只</div>
+      <h3 style="font-size:14px;margin:8px 0">记录今日出壳</h3>
+      <form id="sv">
+        <label style="font-size:13px;color:var(--muted);display:block;margin:6px 0 2px">出壳日期
+          <input type="date" id="sv-hatch_date" value="${today()}" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:2px"></label>
+        <label style="font-size:13px;color:var(--muted);display:block;margin:6px 0 2px">本次出壳只数
+          <input type="number" id="sv-hatch_count" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:2px"></label>
+        <div class="err" id="sv-err"></div>
+        <button type="submit" class="btn-primary" style="margin-top:8px">记录出壳</button>
+      </form>
+      <button type="button" id="sv-next" class="btn-ghost" style="color:var(--green);border-color:var(--green);margin-top:10px">出壳完成，进入育雏中 ›</button>
+      <button type="button" id="sv-fail" class="btn-ghost" style="color:var(--red);border-color:var(--red);margin-left:8px">本窝失败</button>`;
+    zone.querySelector("#sv").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const detail = {
+        breeding_id: br.id,
+        hatch_date: pageContainer.querySelector("#sv-hatch_date").value || null,
+        hatch_count: parseInt(pageContainer.querySelector("#sv-hatch_count").value, 10) || 0,
+      };
+      await sb.from("breeding_details").insert(detail);
+      toast("已记录"); openNest(br.nest_id);
+    });
+    zone.querySelector("#sv-next").addEventListener("click", async () => {
+      await sb.from("breedings").update({ stage: "育雏中" }).eq("id", br.id);
+      toast("进入育雏中"); openNest(br.nest_id);
+    });
+    bindFail(zone, br);
+    return;
+  }
+
   const next = br.stage === "育雏中" ? "断奶成活" : NEXT_STAGE[br.stage];
   if (!next) { zone.innerHTML = ""; return; }
   const fields = STAGE_FIELDS[next] || [];
@@ -454,7 +545,12 @@ async function bindStageAdvance(br) {
     }
     openNest(br.nest_id);
   });
-  zone.querySelector("#sv-fail").addEventListener("click", async () => {
+  bindFail(zone, br);
+}
+function bindFail(zone, br) {
+  const btn = zone.querySelector("#sv-fail");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
     await sb.from("breedings").update({ stage: "失败" }).eq("id", br.id);
     await sb.from("nests").update({ status: "空闲" }).eq("id", br.nest_id);
     toast("本窝标记为失败"); openNest(br.nest_id);
