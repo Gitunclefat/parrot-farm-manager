@@ -60,7 +60,9 @@ const PAGES = {
   birds: { title: "种鸟档案", render: renderBirds },
   breed: { title: "繁殖记录", render: renderBreed },
   chicks: { title: "雏鸟管理", render: renderChicks },
-  more: { title: "更多", render: () => '<div class="empty">存栏 / 销售 / 客户 / 采购 / 待办 / 报表 / 设置：开发中</div>' },
+  more: { title: "更多", render: renderMore },
+  orders: { title: "销售订单", render: renderOrders },
+  customers: { title: "客户管理", render: renderCustomers },
 };
 
 function showPage(name) {
@@ -637,7 +639,9 @@ async function openChickForm(id) {
       <div class="err" id="cf-err"></div>
       <div class="bar"><button type="button" class="btn-ghost" id="cf-c">取消</button><button type="submit" class="btn-primary">保存</button></div>
     </form>
-    <button class="btn-primary" id="cf-promote" style="width:100%;margin-top:14px;background:var(--amber)">一键转种鸟</button>`;
+    <button class="btn-primary" id="cf-promote" style="width:100%;margin-top:14px;background:var(--amber)">一键转种鸟</button>
+    ${c.status === "在养" ? `<button class="btn-primary" id="cf-sellready" style="width:100%;margin-top:8px">标记为待售</button>` : ""}
+    ${c.status === "待售" ? `<button class="btn-primary" id="cf-backliving" style="width:100%;margin-top:8px;background:var(--muted)">退回在养</button>` : ""}`;
   pageContainer.querySelector("#cf-c").addEventListener("click", () => showPage("chicks"));
   pageContainer.querySelector("#cf").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -665,6 +669,14 @@ async function openChickForm(id) {
     if (ins.error) { alert(ins.error.message); return; }
     await sb.from("chicks").update({ status: "已转种鸟" }).eq("id", id);
     toast("已转种鸟 " + birdCode); showPage("chicks");
+  });
+  pageContainer.querySelector("#cf-sellready")?.addEventListener("click", async () => {
+    await sb.from("chicks").update({ status: "待售" }).eq("id", id);
+    toast("已标记为待售"); showPage("chicks");
+  });
+  pageContainer.querySelector("#cf-backliving")?.addEventListener("click", async () => {
+    await sb.from("chicks").update({ status: "在养" }).eq("id", id);
+    toast("已退回在养"); showPage("chicks");
   });
 }
 
@@ -707,6 +719,296 @@ function openSexTest() {
     }
     showPage("chicks");
   });
+}
+
+// ---------- 更多 ----------
+function renderMore() {
+  setTimeout(bindMore, 0);
+  return `
+    <div class="card quick">
+      <button class="btn-line" data-go="orders">销售订单 / 开单</button>
+      <button class="btn-line" data-go="customers">客户管理</button>
+      <button class="btn-line" disabled style="opacity:.4">采购支出（阶段 4）</button>
+      <button class="btn-line" disabled style="opacity:.4">待办提醒（阶段 4）</button>
+      <button class="btn-line" disabled style="opacity:.4">统计报表（阶段 5）</button>
+    </div>`;
+}
+function bindMore() {
+  document.querySelectorAll("[data-go]").forEach((b) =>
+    b.addEventListener("click", () => showPage(b.dataset.go))
+  );
+}
+
+// ---------- 客户 ----------
+function renderCustomers() {
+  setTimeout(bindCustomers, 0);
+  return `
+    <div class="bar">
+      <input id="c-search" placeholder="姓名 / 电话 / 微信" style="flex:1">
+      <button class="btn-primary sm" id="c-add">新增客户</button>
+    </div>
+    <div id="c-list"></div>`;
+}
+function bindCustomers() {
+  const el = (id) => pageContainer.querySelector(id);
+  if (!el("#c-search")) return;
+  el("#c-add").addEventListener("click", () => openCustomerForm());
+  el("#c-search").addEventListener("input", loadCustomers);
+  loadCustomers();
+}
+async function loadCustomers() {
+  const kw = (pageContainer.querySelector("#c-search").value || "").trim();
+  let q = sb.from("customers").select("*").eq("deleted", false).order("id", { ascending: false }).limit(200);
+  if (kw) q = q.or(`name.ilike.%${kw}%,phone.ilike.%${kw}%,wechat.ilike.%${kw}%`);
+  const { data, error } = await q;
+  const box = pageContainer.querySelector("#c-list");
+  if (!box) return;
+  if (error) { box.innerHTML = `<div class="empty">${esc(error.message)}</div>`; return; }
+  if (!data.length) { box.innerHTML = '<div class="empty">暂无客户</div>'; return; }
+  box.innerHTML = data.map((c) => `
+    <div class="row" data-id="${c.id}">
+      <div>
+        <div class="row-title">${esc(c.name || "未命名")}</div>
+        <div class="row-sub">${esc(c.phone || "")}${c.wechat ? " · 微信 " + esc(c.wechat) : ""}${c.source ? " · " + esc(c.source) : ""}</div>
+      </div>
+      <div class="row-arrow">›</div>
+    </div>`).join("");
+  box.querySelectorAll(".row").forEach((r) =>
+    r.addEventListener("click", () => openCustomerForm(Number(r.dataset.id)))
+  );
+}
+function openCustomerForm(id) {
+  const existing = id ? null : { name: "", phone: "", wechat: "", source: "线下" };
+  titleEl.textContent = id ? "编辑客户" : "新增客户";
+  document.querySelectorAll(".nav-item").forEach((x) => x.classList.remove("active"));
+  const load = async () => {
+    if (id) {
+      const { data } = await sb.from("customers").select("*").eq("id", id).single();
+      return data;
+    }
+    return existing;
+  };
+  load().then((c) => {
+    pageContainer.innerHTML = `
+      <form class="form" id="cf">
+        <label>称呼 / 姓名<input id="cf-name" value="${esc(c.name || "")}"></label>
+        <label>电话<input id="cf-phone" value="${esc(c.phone || "")}"></label>
+        <label>微信<input id="cf-wechat" value="${esc(c.wechat || "")}"></label>
+        <label>来源<select id="cf-source">${["抖音", "闲鱼", "朋友介绍", "线下", "其他"].map((s) => `<option ${s === c.source ? "selected" : ""}>${s}</option>`).join("")}</select></label>
+        <label>地址<input id="cf-addr" value="${esc(c.address || "")}"></label>
+        <label>备注<textarea id="cf-note" rows="2">${esc(c.note || "")}</textarea></label>
+        <div class="err" id="cf-err"></div>
+        <div class="bar"><button type="button" class="btn-ghost" id="cf-c">取消</button><button type="submit" class="btn-primary">保存</button></div>
+      </form>`;
+    pageContainer.querySelector("#cf-c").addEventListener("click", () => showPage("customers"));
+    pageContainer.querySelector("#cf").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: pageContainer.querySelector("#cf-name").value.trim(),
+        phone: pageContainer.querySelector("#cf-phone").value.trim() || null,
+        wechat: pageContainer.querySelector("#cf-wechat").value.trim() || null,
+        source: pageContainer.querySelector("#cf-source").value,
+        address: pageContainer.querySelector("#cf-addr").value.trim() || null,
+        note: pageContainer.querySelector("#cf-note").value.trim() || null,
+      };
+      const res = id ? await sb.from("customers").update(payload).eq("id", id)
+                     : await sb.from("customers").insert(payload);
+      if (res.error) { pageContainer.querySelector("#cf-err").textContent = res.error.message; return; }
+      toast("已保存"); showPage("customers");
+    });
+  });
+}
+
+// ---------- 销售订单 ----------
+function renderOrders() {
+  setTimeout(bindOrders, 0);
+  return `
+    <div class="bar">
+      <select id="o-status"><option value="">全部状态</option>${["未收", "部分", "已收", "已取消"].map((s) => `<option>${s}</option>`).join("")}</select>
+      <button class="btn-primary sm" id="o-add" style="margin-left:auto">开新单</button>
+    </div>
+    <div id="o-list"></div>`;
+}
+function bindOrders() {
+  const el = (id) => pageContainer.querySelector(id);
+  if (!el("#o-add")) return;
+  el("#o-add").addEventListener("click", openOrderForm);
+  el("#o-status").addEventListener("change", loadOrders);
+  loadOrders();
+}
+async function loadOrders() {
+  const st = pageContainer.querySelector("#o-status").value;
+  let q = sb.from("orders").select("*, customers(name,phone)").eq("deleted", false).order("id", { ascending: false }).limit(100);
+  if (st) q = q.eq("payment_status", st);
+  const { data, error } = await q;
+  const box = pageContainer.querySelector("#o-list");
+  if (!box) return;
+  if (error) { box.innerHTML = `<div class="empty">${esc(error.message)}</div>`; return; }
+  if (!data.length) { box.innerHTML = '<div class="empty">暂无订单，点「开新单」</div>'; return; }
+  box.innerHTML = data.map((o) => `
+    <div class="row" data-id="${o.id}">
+      <div>
+        <div class="row-title">${esc(o.code)} <span class="tag">${esc(o.payment_status)}</span></div>
+        <div class="row-sub">${esc(o.customers?.name || "散客")} · ¥${Number(o.total || 0).toFixed(2)} · ${esc(o.order_date)}</div>
+      </div>
+      <div class="row-arrow">›</div>
+    </div>`).join("");
+  box.querySelectorAll(".row").forEach((r) =>
+    r.addEventListener("click", () => openOrderForm(Number(r.dataset.id)))
+  );
+}
+
+async function openOrderForm(id) {
+  let o = { items: [] };
+  if (id) {
+    const { data } = await sb.from("orders").select("*, order_items(*), customers(*)").eq("id", id).single();
+    o = data;
+  } else {
+    o.code = await autoCode("SO", "orders");
+  }
+  titleEl.textContent = id ? "订单详情" : "开新单";
+  document.querySelectorAll(".nav-item").forEach((x) => x.classList.remove("active"));
+  pageContainer.innerHTML = `
+    <form class="form" id="of">
+      <label>订单号（自动）<input value="${esc(o.code)}" disabled></label>
+      <label>客户<select id="of-customer">
+        <option value="">散客 / 现结</option>
+      </select>
+        <button type="button" class="btn-ghost" style="color:var(--green);border-color:var(--green);padding:3px 10px;margin-top:4px" id="of-newc">＋ 新客户</button>
+      </label>
+      <label>下单日期<input type="date" id="of-date" value="${o.order_date || today()}"></label>
+      <label>交付方式<select id="of-deliver">${["自提", "送货", "快递"].map((d) => `<option ${d === o.delivery_method ? "selected" : ""}>${d}</option>`).join("")}</select></label>
+
+      <h3 class="sec" style="margin:16px 0 6px">订单明细</h3>
+      <div id="of-items"></div>
+      <button type="button" class="btn-ghost" id="of-additem" style="color:var(--green);border-color:var(--green);width:100%;margin:6px 0">＋ 加一行</button>
+
+      <label>订单总价（元）<input type="number" step="0.01" id="of-total" value="${o.total ?? 0}"></label>
+
+      <label>已收款（元）<input type="number" step="0.01" id="of-paid" value="${(o.payments_sum || 0)}"></label>
+      <label>收款方式<select id="of-method">${["微信", "支付宝", "现金", "转账"].map((m) => `<option>${m}</option>`).join("")}</select></label>
+      <label>备注<input id="of-note" value="${esc(o.note || "")}"></label>
+      <div class="err" id="of-err"></div>
+      <div class="bar"><button type="button" class="btn-ghost" id="of-cancel">返回</button><button type="submit" class="btn-primary">保存订单</button></div>
+    </form>`;
+
+  // 加载客户列表
+  const { data: customers } = await sb.from("customers").select("*").eq("deleted", false).order("id", { ascending: false });
+  const sel = pageContainer.querySelector("#of-customer");
+  sel.innerHTML = `<option value="">散客 / 现结</option>` + (customers || []).map((c) =>
+    `<option value="${c.id}" ${o.customer_id === c.id ? "selected" : ""}>${esc(c.name || "")}${c.phone ? " " + esc(c.phone) : ""}</option>`
+  ).join("");
+  pageContainer.querySelector("#of-newc").addEventListener("click", () => {
+    const name = prompt("客户称呼："); if (!name) return;
+    (async () => {
+      const ins = await sb.from("customers").insert({ name }).select().single();
+      if (ins.error) { alert(ins.error.message); return; }
+      sel.innerHTML += `<option value="${ins.data.id}">${esc(name)}</option>`;
+      sel.value = ins.data.id;
+    })();
+  });
+
+  // 明细行
+  const speciesOpts = Object.keys(SPECIES_VARIETIES);
+  const rows = (o.order_items && o.order_items.length) ? o.order_items : [{ species: "玄凤", qty: 1, price: 0 }];
+  const renderRows = () => {
+    document.getElementById("of-items").innerHTML = rows.map((r, i) => `
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <select data-i="${i}" data-k="species" style="flex:2;padding:8px;border:1px solid var(--line);border-radius:8px">${speciesOpts.map((s) => `<option ${s === r.species ? "selected" : ""}>${s}</option>`).join("")}</select>
+        <input data-i="${i}" data-k="qty" type="number" value="${r.qty}" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px" placeholder="数量">
+        <input data-i="${i}" data-k="price" type="number" step="0.01" value="${r.price}" style="flex:1.4;padding:8px;border:1px solid var(--line);border-radius:8px" placeholder="单价">
+        <button type="button" data-del="${i}" style="color:var(--red);padding:0 8px">×</button>
+      </div>`).join("");
+    document.querySelectorAll("#of-items [data-k]").forEach((el) =>
+      el.addEventListener("change", recalc)
+    );
+    document.querySelectorAll("#of-items [data-del]").forEach((b) =>
+      b.addEventListener("click", () => { rows.splice(Number(b.dataset.del), 1); renderRows(); })
+    );
+  };
+  const recalc = () => {
+    let sum = 0;
+    document.querySelectorAll("#of-items [data-k=species]").forEach((sel, i) => {
+      const q = document.querySelectorAll("#of-items [data-k=qty]")[i].value || 0;
+      const p = document.querySelectorAll("#of-items [data-k=price]")[i].value || 0;
+      sum += Number(q) * Number(p);
+    });
+    document.getElementById("of-total").value = sum.toFixed(2);
+  };
+  pageContainer.querySelector("#of-additem").addEventListener("click", () => { rows.push({ species: "玄凤", qty: 1, price: 0 }); renderRows(); });
+  renderRows();
+
+  // 已收款汇总（如果是已有订单）
+  if (id) {
+    const { data: pays } = await sb.from("payments").select("amount").eq("order_id", id);
+    const sumPaid = (pays || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+    pageContainer.querySelector("#of-paid").value = sumPaid.toFixed(2);
+  }
+
+  pageContainer.querySelector("#of-cancel").addEventListener("click", () => showPage("orders"));
+  pageContainer.querySelector("#of").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = pageContainer.querySelector("#of-err");
+    err.textContent = "";
+    const items = [];
+    document.querySelectorAll("#of-items [data-k=species]").forEach((sel, i) => {
+      const q = document.querySelectorAll("#of-items [data-k=qty]")[i].value;
+      const p = document.querySelectorAll("#of-items [data-k=price]")[i].value;
+      if (Number(q) > 0) items.push({ species: sel.value, qty: Number(q), price: Number(p) });
+    });
+    if (!items.length) { err.textContent = "请至少加一行明细"; return; }
+    const total = Number(pageContainer.querySelector("#of-total").value) || 0;
+    const paid = Number(pageContainer.querySelector("#of-paid").value) || 0;
+    const payStatus = paid <= 0 ? "未收" : (paid >= total ? "已收" : "部分");
+    const orderPayload = {
+      code: o.code,
+      customer_id: pageContainer.querySelector("#of-customer").value || null,
+      total, order_date: pageContainer.querySelector("#of-date").value || today(),
+      payment_status: payStatus,
+      delivery_method: pageContainer.querySelector("#of-deliver").value,
+      note: pageContainer.querySelector("#of-note").value.trim() || null,
+    };
+    let orderId = id;
+    if (id) {
+      const r = await sb.from("orders").update(orderPayload).eq("id", id);
+      if (r.error) { err.textContent = r.error.message; return; }
+    } else {
+      const r = await sb.from("orders").insert(orderPayload).select().single();
+      if (r.error) { err.textContent = r.error.message; return; }
+      orderId = r.data.id;
+      // 删除旧明细再重插
+      await sb.from("order_items").delete().eq("order_id", orderId);
+      await sb.from("order_items").insert(items.map((it) => ({ order_id: orderId, ...it })));
+      // 收款记录（本次填入的 paid）
+      if (paid > 0) {
+        await sb.from("payments").insert({
+          order_id: orderId, amount: paid,
+          method: pageContainer.querySelector("#of-method").value,
+        });
+      }
+      // 扣减待售雏鸟（FIFO）
+      await deductChicks(items);
+    }
+    toast("已保存"); showPage("orders");
+  });
+}
+
+// 按明细扣减待售雏鸟（FIFO：按品种，从最老的待售雏鸟里标记已售）
+async function deductChicks(items) {
+  for (const it of items) {
+    let need = it.qty;
+    while (need > 0) {
+      const { data } = await sb.from("chicks").select("*")
+        .eq("species", it.species).eq("status", "待售").eq("deleted", false)
+        .order("id", { ascending: true }).limit(need);
+      if (!data || !data.length) break;
+      for (const c of data) {
+        await sb.from("chicks").update({ status: "已售" }).eq("id", c.id);
+        need--;
+        if (need <= 0) break;
+      }
+    }
+  }
 }
 
 // ---------- 登录 / 退出 ----------
