@@ -678,13 +678,21 @@ async function loadSexTests() {
   if (error) { list.innerHTML=`<div class="empty">${esc(error.message)}</div>`; return; }
   list.innerHTML = (data||[]).map(t=>`
     <div class="row" data-id="${t.id}">
-      <div>
-        <div class="row-title">${esc(t.code)} <span class="tag">${esc(t.sex_providers?.name||"")}</span></div>
-        <div class="row-sub">${esc(t.test_date)} · ${t.count} 只 · 验卡费 ¥${Number(t.fee||0)} 快递 ¥${Number(t.shipping_fee||0)}</div>
+      <div style="flex:1">
+        <div class="row-title">${esc(t.code||"(无编号)")} <span class="tag">${esc(t.sex_providers?.name||"")}</span></div>
+        <div class="row-sub">${esc(t.test_date)} · ${t.count||0} 只 · 验卡费 ¥${Number(t.fee||0)} 快递 ¥${Number(t.shipping_fee||0)}</div>
       </div>
+      <button class="btn-nav" data-del="${t.id}" style="color:var(--red);border-color:var(--red);margin-right:6px">删除</button>
       <div class="row-arrow">›</div>
     </div>`).join("") || '<div class="empty">暂无验卡记录</div>';
   list.querySelectorAll(".row").forEach(r=>r.addEventListener("click", ()=>openSexTestItems(Number(r.dataset.id))));
+  list.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click", async (e)=>{
+    e.stopPropagation();
+    if (!confirm("确认删除这条验卡批及其详情？")) return;
+    await sb.from("sex_test_items").delete().eq("sex_test_id", +b.dataset.del);
+    await sb.from("sex_tests").delete().eq("id", +b.dataset.del);
+    toast("已删除"); loadSexTests();
+  }));
 }
 async function openSexTestForm() {
   titleEl.textContent = "新建验卡批";
