@@ -431,7 +431,7 @@ async function openBirdForm(id) {
         <label>脚环号（可空）<input id="bf-ring" value="${esc(b.ring_no||"")}"></label>
         <div class="err" id="bf-err"></div>
         <button type="submit" class="btn-primary" style="width:100%">保存</button>
-        ${id ? `<button type="button" id="bf-history" class="btn-ghost" style="width:100%;margin-top:8px">查看历史窝次</button>` : ""}
+        ${id ? `<button type="button" id="bf-history" style="width:100%;margin-top:8px;background:#fff;color:#000;border:1px solid #ccc;border-radius:8px;padding:10px">查看历史窝次</button>` : ""}
       </form>`;
     const speciesSel = document.getElementById("bf-species");
     const varietySel = document.getElementById("bf-variety");
