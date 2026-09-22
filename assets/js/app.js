@@ -574,6 +574,7 @@ async function openChickForm(id) {
       gender: document.getElementById("kf-gender").value,
       status: document.getElementById("kf-status").value,
     };
+    if (!id) payload.code = await autoCode("CH", "chicks");
     const r = id ? await sb.from("chicks").update(payload).eq("id", id)
                  : await sb.from("chicks").insert(payload);
     if (r.error) { document.getElementById("kf-err").textContent = r.error.message; return; }
