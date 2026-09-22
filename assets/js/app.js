@@ -728,28 +728,56 @@ async function openSexTestItems(testId) {
   titleEl.textContent = "验卡详情";
   document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));
   pageContainer.innerHTML = `
-    <div id="items-list"></div>
-    <h3 class="sec">添加单条</h3>
-    <form class="form" id="itf">
-      <label>脚环号<input id="itf-ring"></label>
-      <label>性别<select id="itf-gender"><option>公</option><option>母</option></select></label>
-      <label>品相<input id="itf-variety"></label>
-      <button type="submit" class="btn-primary" style="width:100%">添加</button>
-    </form>`;
+    <form id="itf" style="position:sticky;top:0;background:#fafaf5;padding:10px 0;z-index:2;border-bottom:1px solid var(--line)">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input id="itf-ring" placeholder="脚环号" style="flex:2;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <select id="itf-gender" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:8px"><option>公</option><option>母</option></select>
+        <input id="itf-variety" placeholder="品相" style="flex:1.5;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <button type="submit" class="btn-primary" style="flex:0 0 auto">添加</button>
+      </div>
+      <div id="itf-err" style="color:var(--red);font-size:12px;margin-top:4px"></div>
+    </form>
+    <div id="items-list" style="margin-top:10px"></div>`;
   const render = async () => {
     const { data } = await sb.from("sex_test_items").select("*").eq("sex_test_id",testId).order("id",{ascending:true});
     document.getElementById("items-list").innerHTML = (data||[]).map(it=>`
-      <div class="row"><div>
-        <div class="row-title">${esc(it.ring_no)} <span class="tag">${esc(it.gender)}</span></div>
-        <div class="row-sub">${esc(it.variety||"")}</div>
-      </div></div>`).join("") || '<div class="empty">暂无详情</div>';
+      <div class="row" data-id="${it.id}">
+        <div style="flex:1">
+          <div class="row-title">${esc(it.ring_no)} <span class="tag">${esc(it.gender)}</span></div>
+          <div class="row-sub">${esc(it.variety||"")}</div>
+        </div>
+        <button class="btn-nav" data-edit="${it.id}" data-ring="${esc(it.ring_no||"")}" data-gender="${esc(it.gender||"")}" data-variety="${esc(it.variety||"")}" style="margin-right:6px">改</button>
+        <button class="btn-nav" data-del="${it.id}" style="color:var(--red);border-color:var(--red);margin-right:6px">删</button>
+      </div>`).join("") || '<div class="empty">暂无详情</div>';
+    document.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click", async (e)=>{
+      e.stopPropagation();
+      if (!confirm("删除这条？")) return;
+      await sb.from("sex_test_items").delete().eq("id", +b.dataset.del);
+      render();
+    }));
+    document.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click", async (e)=>{
+      e.stopPropagation();
+      const ring = prompt("脚环号：", b.dataset.ring);
+      if (ring === null) return;
+      const gender = prompt("性别（公/母）：", b.dataset.gender);
+      if (gender === null) return;
+      const variety = prompt("品相：", b.dataset.variety);
+      if (variety === null) return;
+      await sb.from("sex_test_items").update({ ring_no: ring.trim(), gender: gender.trim(), variety: variety.trim()||null }).eq("id", +b.dataset.edit);
+      render();
+    }));
   };
   await render();
   document.getElementById("itf").addEventListener("submit", async (e)=>{
     e.preventDefault();
+    const err = document.getElementById("itf-err"); err.textContent="";
+    const ring = document.getElementById("itf-ring").value.trim();
+    if (!ring) { err.textContent="请填脚环号"; return; }
+    const { data: dup } = await sb.from("sex_test_items").select("id").eq("sex_test_id",testId).eq("ring_no",ring).limit(1);
+    if (dup && dup.length) { err.textContent=`脚环号 ${ring} 已存在`; return; }
     await sb.from("sex_test_items").insert({
       sex_test_id: testId,
-      ring_no: document.getElementById("itf-ring").value.trim(),
+      ring_no: ring,
       gender: document.getElementById("itf-gender").value,
       variety: document.getElementById("itf-variety").value.trim()||null,
     });
