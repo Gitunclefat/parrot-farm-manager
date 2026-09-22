@@ -18,6 +18,18 @@ const BIRD_STATUS = ["在养", "配对", "隔离", "出售", "死亡", "淘汰",
 const CAGE_TYPES = ["繁殖笼", "雏鸟笼", "放飞笼"];
 const CAGE_STATUS = ["空闲", "占用", "维修", "停用"];
 const BREED_STAGES = ["挂窝", "产蛋", "出壳", "休养"];
+const REMINDER_PRESETS = {
+  "喂食": ["换粮补粮", "换净水"],
+  "鸟舍卫生": ["打扫", "鸟房消毒", "清理托盘", "更换薄膜"],
+  "保健医疗": ["多维", "益生菌", "保健砂"],
+  "查窝": ["核对下蛋数", "照蛋", "核对出壳数"],
+  "设备": ["鸟笼巡检", "新建鸟笼"],
+};
+const REMINDER_TYPES = Object.keys(REMINDER_PRESETS);
+function loadCustomReminders() {
+  try { return JSON.parse(localStorage.getItem("custom_reminders")||"{}"); } catch(e){ return {}; }
+}
+function saveCustomReminders(o) { localStorage.setItem("custom_reminders", JSON.stringify(o)); }
 
 let sessionUser = null;
 
@@ -1189,8 +1201,8 @@ async function loadReminders() {
   if (!list) return;
   list.innerHTML = (data||[]).map(r=>`
     <div class="row" style="${r.done?"opacity:.5":""}">
-      <div><div class="row-title">${r.done?"✅ ":""}${esc(r.title)}</div>
-      <div class="row-sub">${esc(r.remind_date||"")} · ${esc(r.type||"")}</div></div>
+      <div><div class="row-title">${r.done?"✅ ":""}${esc(r.title)} <span class="tag">${esc(r.type||"")}</span></div>
+      <div class="row-sub">${esc(r.remind_date||"")}${r.note?` · ${esc(r.note)}`:""}</div></div>
       ${r.done?"":`<button class="btn-nav" data-done="${r.id}">完成</button>`}
     </div>`).join("") || '<div class="empty">暂无</div>';
   list.querySelectorAll("[data-done]").forEach(b=>b.addEventListener("click", async ()=>{
@@ -1203,17 +1215,56 @@ function openReminderForm() {
   document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));
   pageContainer.innerHTML = `
     <form class="form" id="rf">
-      <label>事项<input id="rf-title"></label>
+      <label>类型<select id="rf-type">${REMINDER_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></label>
+      <label>事项<select id="rf-title"></select></label>
+      <button type="button" class="btn-ghost" id="rf-addcustom" style="color:var(--green);border-color:var(--green);margin-bottom:8px">＋ 新增自定义事项</button>
       <label>日期<input type="date" id="rf-date" value="${today()}"></label>
-      <label>类型<select id="rf-type">${["照蛋","换羽","驱虫","疫苗","其他"].map(t=>`<option>${t}</option>`).join("")}</select></label>
+      <label>描述（可留空）<input id="rf-note" placeholder="补充说明，如用量、地点等"></label>
       <button type="submit" class="btn-primary" style="width:100%">保存</button>
     </form>`;
+  const typeSel = document.getElementById("rf-type");
+  const titleSel = document.getElementById("rf-title");
+  const fillTitles = (t) => {
+    const custom = loadCustomReminders()[t] || [];
+    const list = [...(REMINDER_PRESETS[t]||[]), ...custom];
+    titleSel.innerHTML = list.map(x=>`<option>${x}</option>`).join("") + '<option value="__new__">＋ 手动输入</option>';
+  };
+  fillTitles(typeSel.value);
+  typeSel.addEventListener("change", ()=>fillTitles(typeSel.value));
+  titleSel.addEventListener("change", ()=>{
+    if (titleSel.value === "__new__") {
+      const v = prompt("新事项名称：");
+      if (v) {
+        const o = loadCustomReminders();
+        o[typeSel.value] = o[typeSel.value] || [];
+        if (!o[typeSel.value].includes(v)) o[typeSel.value].push(v);
+        saveCustomReminders(o);
+        fillTitles(typeSel.value);
+        titleSel.value = v;
+      }
+    }
+  });
+  document.getElementById("rf-addcustom").addEventListener("click", ()=>{
+    const v = prompt("新事项名称（会加入「" + typeSel.value + "」字典）：");
+    if (v) {
+      const o = loadCustomReminders();
+      o[typeSel.value] = o[typeSel.value] || [];
+      if (!o[typeSel.value].includes(v)) o[typeSel.value].push(v);
+      saveCustomReminders(o);
+      fillTitles(typeSel.value);
+      titleSel.value = v;
+    }
+  });
   document.getElementById("rf").addEventListener("submit", async (e)=>{
     e.preventDefault();
+    let title = titleSel.value;
+    if (title === "__new__") title = prompt("事项名称：") || "";
     await sb.from("reminders").insert({
-      title: document.getElementById("rf-title").value.trim(),
+      title: title.trim(),
       remind_date: document.getElementById("rf-date").value,
-      type: document.getElementById("rf-type").value, done:false,
+      type: typeSel.value,
+      note: document.getElementById("rf-note").value.trim()||null,
+      done:false,
     });
     toast("已添加"); showPage("reminders");
   });
