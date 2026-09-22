@@ -317,6 +317,7 @@ async function startPairing(nestId) {
     });
     if (r.error) { document.getElementById("pf-err").textContent = r.error.message; return; }
     await sb.from("nests").update({ status: "占用" }).eq("id", nestId);
+    await sb.from("birds").update({ nest_id: nestId, status: "在养" }).in("id", [+maleId, +femaleId]);
     toast("已开始挂窝"); showPage("breed");
   });
 }
@@ -483,7 +484,7 @@ function renderChicks() {
 function bindChicks() {
   const el = (id) => pageContainer.querySelector(id);
   if (!el("#k-add")) return;
-  el("#k-add").addEventListener("click", openChickForm);
+  el("#k-add").addEventListener("click", ()=>openChickForm());
   loadChicks();
 }
 async function loadChicks() {
@@ -503,16 +504,15 @@ async function loadChicks() {
     const ringed = arr.filter(c=>c.ring_no);
     const unringed = arr.length - ringed.length;
     html += `
-      <h3 class="sec">${esc(cage.code)} <span style="color:var(--muted);font-weight:400;font-size:13px">共 ${arr.length} 只${unringed?`（${unringed} 只未上环）`:""}</span></h3>
-      ${ringed.map(c=>`
+      <h3 class="sec">${esc(cage.code)} <span style="color:var(--muted);font-weight:400;font-size:13px">共 ${arr.length} 只</span></h3>
+      ${arr.map(c=>`
         <div class="row" data-id="${c.id}">
           <div>
-            <div class="row-title">${esc(c.ring_no)} <span class="tag">${esc(c.gender)}</span> <span class="tag">${esc(c.status)}</span></div>
+            <div class="row-title">${esc(c.ring_no||"未上环")} <span class="tag">${esc(c.gender)}</span> <span class="tag">${esc(c.status)}</span></div>
             <div class="row-sub">${esc(c.breedings?.code||"")} · 品相 ${esc(c.variety||"")} · ${esc(c.hatch_date||"")}</div>
           </div>
           <div class="row-arrow">›</div>
-        </div>`).join("")}
-      ${unringed ? `<div class="row" style="opacity:.6"><div><div class="row-title" style="color:var(--muted)">未上环 × ${unringed}</div></div></div>` : ""}`;
+        </div>`).join("")}`;
   });
   const noCage = groups[0] || [];
   if (noCage.length) {
@@ -666,7 +666,7 @@ function renderSexTests() {
 function bindSexTests() {
   const el=(id)=>pageContainer.querySelector(id);
   if (!el("#st-new")) return;
-  el("#st-new").addEventListener("click", openSexTestForm);
+  el("#st-new").addEventListener("click", ()=>openSexTestForm());
   el("#st-import").addEventListener("click", openImportSexTest);
   loadSexTests();
 }
@@ -1136,7 +1136,7 @@ function renderReminders() {
 function bindReminders() {
   const el=(id)=>pageContainer.querySelector(id);
   if (!el("#r-add")) return;
-  el("#r-add").addEventListener("click", openReminderForm);
+  el("#r-add").addEventListener("click", ()=>openReminderForm());
   el("#r-filter").addEventListener("change", loadReminders);
   loadReminders();
 }
