@@ -1131,8 +1131,8 @@ async function loadPurchases() {
   const head = `<div style="padding:10px 4px;font-size:13px;color:var(--muted)">${label} 合计：<b>¥${total.toFixed(2)}</b></div>`;
   box.innerHTML = head + ((data||[]).map(p=>`
     <div class="row" data-id="${p.id}"><div>
-      <div class="row-title">${esc(p.category||"其他")} <span style="color:var(--red);float:right">¥${Number(p.amount||0).toFixed(2)}</span></div>
-      <div class="row-sub">${esc(p.purchase_date||"")} · ${esc(p.supplier||"")}</div>
+      <div class="row-title">${esc(p.item||p.category||"其他")} <span style="color:var(--red);float:right">¥${Number(p.amount||0).toFixed(2)}</span></div>
+      <div class="row-sub">${esc(p.purchase_date||"")} · ${esc(p.category||"")} · ${esc(p.supplier||"")}</div>
     </div></div>`).join("") || '<div class="empty">无记录</div>');
   box.querySelectorAll(".row").forEach(r=>r.addEventListener("click", ()=>openPurchaseForm(Number(r.dataset.id))));
 }
@@ -1146,6 +1146,7 @@ function openPurchaseForm(id) {
       <form class="form" id="pf">
         <label>日期<input type="date" id="pf-date" value="${p.purchase_date||today()}"></label>
         <label>类别<select id="pf-cat">${["种鸟","饲料","药品","耗材","其他"].map(c=>`<option ${c===p.category?"selected":""}>${c}</option>`).join("")}</select></label>
+        <label>商品/内容<input id="pf-item" value="${esc(p.item||"")}" placeholder="如：鸡饲料 50斤 / 某品牌鹦鹉奶粉"></label>
         <label>金额<input type="number" step="0.01" id="pf-amt" value="${p.amount||0}"></label>
         <label>供应商<input id="pf-sup" value="${esc(p.supplier||"")}"></label>
         <div class="bar"><button type="button" class="btn-ghost" id="pf-c">取消</button><button type="submit" class="btn-primary">保存</button></div>
@@ -1156,6 +1157,7 @@ function openPurchaseForm(id) {
       const payload = {
         purchase_date: document.getElementById("pf-date").value,
         category: document.getElementById("pf-cat").value,
+        item: document.getElementById("pf-item").value.trim()||null,
         amount: +document.getElementById("pf-amt").value||0,
         supplier: document.getElementById("pf-sup").value.trim()||null,
       };
