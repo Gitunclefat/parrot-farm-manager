@@ -1183,28 +1183,41 @@ function openPurchaseForm(id) {
 // ---------- 待办 ----------
 function renderReminders() {
   setTimeout(bindReminders,0);
-  return `<div class="bar"><select id="r-filter"><option value="pending">待办</option><option value="done">已完成</option></select><button class="btn-primary sm" id="r-add" style="margin-left:auto">＋ 提醒</button></div><div id="r-list"></div>`;
+  const typeOpts = ['<option value="">全部类型</option>']
+    .concat(REMINDER_TYPES.map(t=>`<option>${t}</option>`)).join("");
+  return `<div class="bar">
+      <select id="r-type" style="flex:1">${typeOpts}</select>
+      <button class="btn-primary sm" id="r-add" style="margin-left:auto">＋ 提醒</button>
+    </div><div id="r-list"></div>`;
 }
 function bindReminders() {
   const el=(id)=>pageContainer.querySelector(id);
   if (!el("#r-add")) return;
   el("#r-add").addEventListener("click", ()=>openReminderForm());
-  el("#r-filter").addEventListener("change", loadReminders);
+  el("#r-type").addEventListener("change", loadReminders);
   loadReminders();
 }
 async function loadReminders() {
-  const f = pageContainer.querySelector("#r-filter").value;
-  let q = sb.from("reminders").select("*").eq("deleted",false).order("id",{ascending:false}).limit(100);
-  if (f==="pending") q=q.eq("done",false); else q=q.eq("done",true);
-  const { data } = await q;
+  const type = pageContainer.querySelector("#r-type").value;
+  const { data } = await sb.from("reminders").select("*").eq("deleted",false)
+    .order("done",{ascending:true}).order("remind_date",{ascending:false}).limit(300);
+  let rows = data||[];
+  if (type) rows = rows.filter(r=>r.type === type);
+  const pending = rows.filter(r=>!r.done);
+  const done = rows.filter(r=>r.done);
   const list = pageContainer.querySelector("#r-list");
   if (!list) return;
-  list.innerHTML = (data||[]).map(r=>`
-    <div class="row" style="${r.done?"opacity:.5":""}">
+  const rowHtml = (r) => `
+    <div class="row" style="${r.done?"opacity:.6":""}">
       <div><div class="row-title">${r.done?"✅ ":""}${esc(r.title)} <span class="tag">${esc(r.type||"")}</span></div>
       <div class="row-sub">${esc(r.remind_date||"")}${r.note?` · ${esc(r.note)}`:""}</div></div>
       ${r.done?"":`<button class="btn-nav" data-done="${r.id}">完成</button>`}
-    </div>`).join("") || '<div class="empty">暂无</div>';
+    </div>`;
+  list.innerHTML = `
+    <h3 class="sec" style="margin-top:4px">待办（${pending.length}）</h3>
+    ${pending.map(rowHtml).join("") || '<div class="empty">无待办</div>'}
+    <h3 class="sec" style="margin-top:16px">已完成（${done.length}）</h3>
+    ${done.map(rowHtml).join("") || '<div class="empty">暂无完成记录</div>'}`;
   list.querySelectorAll("[data-done]").forEach(b=>b.addEventListener("click", async ()=>{
     await sb.from("reminders").update({done:true}).eq("id",+b.dataset.done);
     loadReminders();
