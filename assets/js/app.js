@@ -739,8 +739,9 @@ async function openSexTestItems(testId) {
     </form>
     <div id="items-list" style="margin-top:10px"></div>`;
   const render = async () => {
-    const { data } = await sb.from("sex_test_items").select("*").eq("sex_test_id",testId).order("id",{ascending:true});
-    document.getElementById("items-list").innerHTML = (data||[]).map(it=>`
+    const { data } = await sb.from("sex_test_items").select("*").eq("sex_test_id",testId).order("ring_no",{ascending:true});
+    const head = `<div style="padding:6px 4px;font-size:13px;color:var(--muted)">共 <b>${(data||[]).length}</b> 条</div>`;
+    document.getElementById("items-list").innerHTML = head + ((data||[]).map(it=>`
       <div class="row" data-id="${it.id}">
         <div style="flex:1">
           <div class="row-title">${esc(it.ring_no)} <span class="tag">${esc(it.gender)}</span></div>
@@ -748,7 +749,7 @@ async function openSexTestItems(testId) {
         </div>
         <button class="btn-nav" data-edit="${it.id}" data-ring="${esc(it.ring_no||"")}" data-gender="${esc(it.gender||"")}" data-variety="${esc(it.variety||"")}" style="margin-right:6px">改</button>
         <button class="btn-nav" data-del="${it.id}" style="color:var(--red);border-color:var(--red);margin-right:6px">删</button>
-      </div>`).join("") || '<div class="empty">暂无详情</div>';
+      </div>`).join("") || '<div class="empty">暂无详情</div>');
     document.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click", async (e)=>{
       e.stopPropagation();
       if (!confirm("删除这条？")) return;
