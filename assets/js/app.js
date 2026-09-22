@@ -1211,7 +1211,7 @@ async function loadReminders() {
     <div class="row" style="${r.done?"opacity:.6":""}">
       <div><div class="row-title">${r.done?"✅ ":""}${esc(r.title)} <span class="tag">${esc(r.type||"")}</span></div>
       <div class="row-sub">${esc(r.remind_date||"")}${r.note?` · ${esc(r.note)}`:""}</div></div>
-      ${r.done?"":`<button class="btn-nav" data-done="${r.id}">完成</button>`}
+      ${r.done?"":`<button class="btn-nav" data-edit="${r.id}" style="margin-right:6px">改</button><button class="btn-nav" data-done="${r.id}">完成</button>`}
     </div>`;
   list.innerHTML = `
     <h3 class="sec" style="margin-top:4px">待办（${pending.length}）</h3>
@@ -1222,25 +1222,28 @@ async function loadReminders() {
     await sb.from("reminders").update({done:true}).eq("id",+b.dataset.done);
     loadReminders();
   }));
+  list.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click", ()=>openReminderForm(+b.dataset.edit)));
 }
-function openReminderForm() {
-  titleEl.textContent = "新增提醒";
+async function openReminderForm(id) {
+  titleEl.textContent = id ? "编辑提醒" : "新增提醒";
   document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));
+  const ex = id ? await sb.from("reminders").select("*").eq("id",id).single().then(r=>r.data) : null;
+  const cur = ex || { title:"", remind_date: today(), type: REMINDER_TYPES[0], note:"" };
   pageContainer.innerHTML = `
     <form class="form" id="rf">
-      <label>类型<select id="rf-type">${REMINDER_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></label>
+      <label>类型<select id="rf-type">${REMINDER_TYPES.map(t=>`<option ${t===cur.type?"selected":""}>${t}</option>`).join("")}</select></label>
       <label>事项<select id="rf-title"></select></label>
       <button type="button" class="btn-ghost" id="rf-addcustom" style="color:var(--green);border-color:var(--green);margin-bottom:8px">＋ 新增自定义事项</button>
-      <label>日期<input type="date" id="rf-date" value="${today()}"></label>
-      <label>描述（可留空）<input id="rf-note" placeholder="补充说明，如用量、地点等"></label>
+      <label>日期<input type="date" id="rf-date" value="${cur.remind_date||today()}"></label>
+      <label>描述（可留空）<input id="rf-note" value="${esc(cur.note||"")}" placeholder="补充说明，如用量、地点等"></label>
       <button type="submit" class="btn-primary" style="width:100%">保存</button>
     </form>`;
   const typeSel = document.getElementById("rf-type");
   const titleSel = document.getElementById("rf-title");
   const fillTitles = (t) => {
     const custom = loadCustomReminders()[t] || [];
-    const list = [...(REMINDER_PRESETS[t]||[]), ...custom];
-    titleSel.innerHTML = list.map(x=>`<option>${x}</option>`).join("") + '<option value="__new__">＋ 手动输入</option>';
+    const list = [...new Set([...(REMINDER_PRESETS[t]||[]), ...custom, cur.title].filter(Boolean))];
+    titleSel.innerHTML = list.map(x=>`<option ${x===cur.title?"selected":""}>${x}</option>`).join("") + '<option value="__new__">＋ 手动输入</option>';
   };
   fillTitles(typeSel.value);
   typeSel.addEventListener("change", ()=>fillTitles(typeSel.value));
@@ -1272,14 +1275,15 @@ function openReminderForm() {
     e.preventDefault();
     let title = titleSel.value;
     if (title === "__new__") title = prompt("事项名称：") || "";
-    await sb.from("reminders").insert({
+    const payload = {
       title: title.trim(),
       remind_date: document.getElementById("rf-date").value,
       type: typeSel.value,
       note: document.getElementById("rf-note").value.trim()||null,
-      done:false,
-    });
-    toast("已添加"); showPage("reminders");
+    };
+    if (id) await sb.from("reminders").update(payload).eq("id", id);
+    else await sb.from("reminders").insert({ ...payload, done: false });
+    toast("已保存"); showPage("reminders");
   });
 }
 
